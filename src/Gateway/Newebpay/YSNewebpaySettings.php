@@ -32,6 +32,14 @@ final class YSNewebpaySettings {
 		'applepay_enabled'=> 'ys_ec_newebpay_applepay_enabled',
 	];
 
+	public const LOGISTICS_METHODS = [
+		'ys_ec_newebpay_ship_711_c2c'    => '7-ELEVEN C2C',
+		'ys_ec_newebpay_ship_family_c2c' => '全家 C2C',
+		'ys_ec_newebpay_ship_hilife_c2c' => '萊爾富 C2C',
+		'ys_ec_newebpay_ship_ok_c2c'     => 'OK mart C2C',
+		'ys_ec_newebpay_ship_711_b2c'    => '7-ELEVEN B2C',
+	];
+
 	public static function register(): void {
 		add_action( 'admin_post_ys_ec_newebpay_save_settings', [ __CLASS__, 'handle_save' ] );
 		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'enqueue_assets' ] );
@@ -39,7 +47,10 @@ final class YSNewebpaySettings {
 
 	public static function enqueue_assets( string $hook ): void {
 		$page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( (string) $_GET['page'] ) ) : '';
-		if ( false === strpos( $hook, 'ys-ecommerce-newebpay' ) && 'ys-ecommerce-newebpay' !== $page ) {
+		if ( false === strpos( $hook, 'ys-ec-newebpay' )
+			&& false === strpos( $hook, 'ys-ecommerce-newebpay' )
+			&& ! in_array( $page, [ 'ys-ec-newebpay', 'ys-ecommerce-newebpay' ], true )
+		) {
 			return;
 		}
 
@@ -132,11 +143,20 @@ final class YSNewebpaySettings {
 	 */
 	public static function get_settings_for_render(): array {
 		$settings = self::get_all();
+		$ec       = YSEcommerce::get_instance();
 
 		$settings['hash_key_is_set'] = '' !== (string) ( $settings['hash_key'] ?? '' );
 		$settings['hash_iv_is_set']  = '' !== (string) ( $settings['hash_iv'] ?? '' );
 		$settings['hash_key']        = '';
 		$settings['hash_iv']         = '';
+		$settings['logistics']       = [];
+
+		foreach ( self::LOGISTICS_METHODS as $method_id => $label ) {
+			$settings['logistics'][ $method_id ] = [
+				'label'   => $label,
+				'enabled' => (string) $ec->get_setting( 'shipping_' . $method_id . '_enabled', '0' ),
+			];
+		}
 
 		return $settings;
 	}
@@ -196,7 +216,13 @@ final class YSNewebpaySettings {
 			$ec->update_setting( self::SETTING_KEYS['hash_iv'], YSCrypto::encrypt_for_storage( $hash_iv ) );
 		}
 
-		$redirect = wp_get_referer() ?: admin_url( 'admin.php?page=ys-ecommerce-newebpay' );
+		foreach ( self::LOGISTICS_METHODS as $method_id => $label ) {
+			unset( $label );
+			$field = 'shipping_' . $method_id . '_enabled';
+			$ec->update_setting( $field, isset( $_POST[ $field ] ) ? '1' : '0' );
+		}
+
+		$redirect = wp_get_referer() ?: admin_url( 'admin.php?page=ys-ec-newebpay' );
 		wp_safe_redirect( add_query_arg( 'ys_ec_newebpay_saved', '1', $redirect ) );
 		exit;
 	}
@@ -212,9 +238,11 @@ final class YSNewebpaySettings {
 		$nonce_action    = self::NONCE_ACTION;
 		$notify_url      = YSNewebpayCallbackControllerProxy::notify_url();
 		$return_url      = YSNewebpayCallbackControllerProxy::return_url();
+		$store_callback_url = rest_url( 'ys-ecommerce/v1/newebpay/store-callback' );
+		$shipping_notify_url = rest_url( 'ys-ecommerce/v1/newebpay/shipping-notify' );
 
 		if ( class_exists( YSAdminApp::class ) ) {
-			YSAdminApp::open( 'NewebPay', 'Payment / NewebPay' );
+			YSAdminApp::open( 'NewebPay', '金物流 / NewebPay' );
 		}
 
 		$template = dirname( __DIR__, 3 ) . '/templates/admin/gateways/newebpay-settings.php';

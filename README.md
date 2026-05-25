@@ -9,12 +9,12 @@ Standalone NewebPay provider plugin for YS CART.
 - NotifyURL and ReturnURL handlers using YS CART payment lifecycle service.
 - NewebPay query API wrapper.
 - Credit-card close/refund and e-wallet refund wrappers.
-- Convenience-store logistics fields persisted in YS CART-compatible storage:
-  - `cvs_store_id`
-  - `cvs_store_name`
-  - `cvs_store_addr`
-  - `payment_detail.newebpay_store`
-  - `payment_detail.shipping`
+- NewebPay official logistics API integration:
+  - Store map (`storeMap`) for 7-ELEVEN, FamilyMart, HiLife, and OK mart.
+  - Shipment create, shipment number lookup, print label, query, modify, trace, and status notify handlers.
+  - C2C store-to-store: 7-ELEVEN, FamilyMart, HiLife, OK mart.
+  - B2C bulk warehouse pickup: 7-ELEVEN.
+  - YS CART-compatible `cvs_store_*`, shipping-label, tracking, and pipeline storage.
 - Bundled YS Plugin Hub Client for updates from yangsheep.com.tw.
 
 ## Requirements
@@ -28,7 +28,7 @@ Standalone NewebPay provider plugin for YS CART.
 1. Install and activate YS CART.
 2. Install and activate this plugin.
 3. Open YS CART payment settings and configure NewebPay.
-4. Enable the payment methods you want to expose at checkout.
+4. Enable the payment and logistics methods you want to expose at checkout.
 
 ## Callback URLs
 
@@ -36,6 +36,8 @@ Set these in NewebPay if the merchant portal requires explicit URLs:
 
 - NotifyURL: `/wp-json/ys-ecommerce/v1/newebpay/notify`
 - ReturnURL: `/wp-json/ys-ecommerce/v1/newebpay/return`
+- Store callback: `/wp-json/ys-ecommerce/v1/newebpay/store-callback`
+- Shipping notify: `/wp-json/ys-ecommerce/v1/newebpay/shipping-notify`
 
 The plugin also sends these URLs in each MPG request.
 
