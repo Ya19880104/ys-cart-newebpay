@@ -1,0 +1,9 @@
+/artifacts/
+/node_modules/
+/vendor/*
+!/vendor/autoload.php
+!/vendor/yangsheep/
+!/vendor/yangsheep/ys-plugin-hub-client/
+!/vendor/yangsheep/ys-plugin-hub-client/**
+.DS_Store
+Thumbs.db
