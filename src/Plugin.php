@@ -56,6 +56,7 @@ final class Plugin {
 		add_filter( 'ys_ec_shipping_carrier_adapter', [ $this, 'register_carrier_adapter' ], 10, 2 );
 		add_filter( 'ys_ec_shipping_provider_labels', [ $this, 'register_shipping_provider_label' ] );
 		add_filter( 'ys_ec_external_admin_pages', [ $this, 'register_external_admin_page' ] );
+		add_filter( 'ys_ec_admin_nav_groups', [ $this, 'register_admin_nav_group' ] );
 	}
 
 	public function register_gateways(): void {
@@ -225,5 +226,26 @@ final class Plugin {
 		$pages[] = 'ys-ecommerce-newebpay';
 
 		return array_values( array_unique( $pages ) );
+	}
+
+	/**
+	 * @param array<string,array{label:string,icon:string,slugs:array<int,string>}> $groups
+	 * @return array<string,array{label:string,icon:string,slugs:array<int,string>}>
+	 */
+	public function register_admin_nav_group( array $groups ): array {
+		if ( ! isset( $groups['providers'] ) || ! is_array( $groups['providers']['slugs'] ?? null ) ) {
+			return $groups;
+		}
+
+		$groups['providers']['slugs'] = array_values(
+			array_unique(
+				array_merge(
+					$groups['providers']['slugs'],
+					[ 'ys-ec-newebpay', 'ys-ecommerce-newebpay' ]
+				)
+			)
+		);
+
+		return $groups;
 	}
 }

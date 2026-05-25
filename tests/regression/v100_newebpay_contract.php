@@ -36,9 +36,15 @@ foreach ([
     'ys_ec_shipping_carrier_adapter',
     'ys_ec_shipping_provider_labels',
     'ys_ec_external_admin_pages',
+    'ys_ec_admin_nav_groups',
 ] as $hook) {
     assert_contains($hook, $plugin, "hook {$hook}");
 }
+
+assert_contains('register_admin_nav_group', $plugin, 'admin nav group callback');
+assert_contains("'providers'", $plugin, 'provider nav group key');
+assert_contains("'ys-ec-newebpay'", $plugin, 'primary admin slug in nav group');
+assert_contains("'ys-ecommerce-newebpay'", $plugin, 'legacy admin slug in nav group');
 
 foreach ([
     "admin.php?page=ys-ec-newebpay",
