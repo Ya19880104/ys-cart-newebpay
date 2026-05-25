@@ -133,6 +133,14 @@ final class YSNewebpaySettings {
 		return self::is_global_enabled() && '1' === self::get( $alias, '0' );
 	}
 
+	public static function is_logistics_method_enabled( string $method_id ): bool {
+		if ( ! self::is_global_enabled() || ! isset( self::LOGISTICS_METHODS[ $method_id ] ) ) {
+			return false;
+		}
+
+		return '1' === (string) YSEcommerce::get_instance()->get_setting( 'shipping_' . $method_id . '_enabled', '0' );
+	}
+
 	/**
 	 * @return array<string,string>
 	 */

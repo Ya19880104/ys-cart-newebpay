@@ -60,7 +60,7 @@ final class Plugin {
 	}
 
 	public function register_gateways(): void {
-		if ( ! class_exists( YSGatewayRegistry::class ) ) {
+		if ( ! class_exists( YSGatewayRegistry::class ) || ! YSNewebpaySettings::is_global_enabled() ) {
 			return;
 		}
 
@@ -74,15 +74,23 @@ final class Plugin {
 	}
 
 	public function register_shipping_methods(): void {
-		if ( ! class_exists( YSShippingRegistry::class ) ) {
+		if ( ! class_exists( YSShippingRegistry::class ) || ! YSNewebpaySettings::is_global_enabled() ) {
 			return;
 		}
 
-		YSShippingRegistry::register( new YSNewebpayShipping711C2C() );
-		YSShippingRegistry::register( new YSNewebpayShippingFamilyC2C() );
-		YSShippingRegistry::register( new YSNewebpayShippingHilifeC2C() );
-		YSShippingRegistry::register( new YSNewebpayShippingOkC2C() );
-		YSShippingRegistry::register( new YSNewebpayShipping711B2C() );
+		$methods = [
+			'ys_ec_newebpay_ship_711_c2c'    => YSNewebpayShipping711C2C::class,
+			'ys_ec_newebpay_ship_family_c2c' => YSNewebpayShippingFamilyC2C::class,
+			'ys_ec_newebpay_ship_hilife_c2c' => YSNewebpayShippingHilifeC2C::class,
+			'ys_ec_newebpay_ship_ok_c2c'     => YSNewebpayShippingOkC2C::class,
+			'ys_ec_newebpay_ship_711_b2c'    => YSNewebpayShipping711B2C::class,
+		];
+
+		foreach ( $methods as $method_id => $method_class ) {
+			if ( YSNewebpaySettings::is_logistics_method_enabled( $method_id ) ) {
+				YSShippingRegistry::register( new $method_class() );
+			}
+		}
 	}
 
 	/**
@@ -160,6 +168,10 @@ final class Plugin {
 	public function newebpay_map_url( \WP_REST_Request $request ): \WP_REST_Response {
 		$params      = class_exists( YSRequestParser::class ) ? YSRequestParser::params( $request ) : $request->get_params();
 		$shipping_id = sanitize_text_field( (string) ( $params['shipping_id'] ?? $params['shipping_method'] ?? '' ) );
+
+		if ( ! YSNewebpaySettings::is_global_enabled() ) {
+			return YSRestResponder::error( 'provider_disabled', 'NewebPay provider is disabled.' );
+		}
 
 		if ( '' === $shipping_id ) {
 			return YSRestResponder::error( 'missing_shipping_id', 'Missing shipping method ID.' );

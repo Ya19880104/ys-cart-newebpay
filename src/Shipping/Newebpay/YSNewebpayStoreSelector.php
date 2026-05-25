@@ -3,6 +3,7 @@
 namespace YangSheep\YSCartNewebpay\Shipping\Newebpay;
 
 use YangSheep\Ecommerce\Utils\YSLogger;
+use YangSheep\YSCartNewebpay\Gateway\Newebpay\YSNewebpaySettings;
 use YangSheep\YSCartNewebpay\Logistics\Newebpay\YSNewebpayLogisticsClient;
 
 defined( 'ABSPATH' ) || exit;
@@ -22,6 +23,10 @@ final class YSNewebpayStoreSelector {
 	public static function build_map_form_data( string $shipping_id ) {
 		$shipping_id = sanitize_key( $shipping_id );
 		if ( '' === $shipping_id || ! isset( self::METHOD_MAP[ $shipping_id ] ) ) {
+			return false;
+		}
+
+		if ( ! YSNewebpaySettings::is_logistics_method_enabled( $shipping_id ) ) {
 			return false;
 		}
 
