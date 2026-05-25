@@ -51,7 +51,7 @@ abstract class YSNewebpayShipping implements YSShippingInterface {
 		}
 
 		$total_weight = $this->calculate_total_weight( $order_data['cart_items'] ?? [] );
-		$max_weight   = (float) $this->get_option( 'max_weight', 5 );
+		$max_weight   = (float) $this->get_option( 'max_weight', $this->get_default_max_weight() );
 		if ( $max_weight > 0 && $total_weight > $max_weight ) {
 			return false;
 		}
@@ -114,7 +114,7 @@ abstract class YSNewebpayShipping implements YSShippingInterface {
 			'max_weight' => [
 				'type'    => 'number',
 				'label'   => '最高重量 kg',
-				'default' => '5',
+				'default' => (string) $this->get_default_max_weight(),
 				'desc'    => '0 表示不限制。',
 			],
 		];
@@ -130,6 +130,10 @@ abstract class YSNewebpayShipping implements YSShippingInterface {
 	abstract public function get_lgs_type(): string;
 
 	abstract public function get_ship_type(): string;
+
+	protected function get_default_max_weight(): float {
+		return 5.0;
+	}
 
 	public function get_trade_type(): string {
 		return '3';

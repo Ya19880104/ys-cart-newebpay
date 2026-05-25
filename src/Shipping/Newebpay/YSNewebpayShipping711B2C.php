@@ -15,4 +15,8 @@ final class YSNewebpayShipping711B2C extends YSNewebpayShipping {
 	public function get_ship_type(): string {
 		return '1';
 	}
+
+	protected function get_default_max_weight(): float {
+		return 10.0;
+	}
 }

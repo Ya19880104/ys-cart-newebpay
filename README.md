@@ -7,6 +7,7 @@ Standalone NewebPay provider plugin for YS CART.
 - NewebPay MPG form-post checkout using AES-256-CBC (`EncryptType=0`).
 - Credit card, installment, ATM virtual account, CVS code, barcode, LINE Pay, and Apple Pay gateway variants.
 - NotifyURL and ReturnURL handlers using YS CART payment lifecycle service.
+- PayUni-style YS CART admin settings with API, payment, logistics, installment, callback, and log tabs.
 - NewebPay query API wrapper.
 - Credit-card close/refund and e-wallet refund wrappers.
 - NewebPay official logistics API integration:

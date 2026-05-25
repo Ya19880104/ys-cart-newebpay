@@ -130,7 +130,19 @@ foreach ([
 $storeSelector = read_file('src/Shipping/Newebpay/YSNewebpayStoreSelector.php');
 assert_contains('/newebpay/store-callback', $storeSelector, 'store callback route reference');
 assert_contains('ys_ec_store_selected', $storeSelector, 'store callback postMessage');
+assert_contains("localStorage.setItem('ys_ec_selected_store'", $storeSelector, 'store callback localStorage fallback');
+assert_contains("sessionStorage.setItem('ys_ec_selected_store'", $storeSelector, 'store callback sessionStorage fallback');
+assert_contains('_transient_ys_ec_newebpay_map_', $storeSelector, 'store callback merchant order fallback lookup');
 assert_contains("'provider' => 'newebpay'", $storeSelector, 'store callback provider');
+
+$shippingBase = read_file('src/Shipping/Newebpay/YSNewebpayShipping.php');
+assert_contains('get_default_max_weight', $shippingBase, 'carrier-specific max weight hook');
+
+$shipping711 = read_file('src/Shipping/Newebpay/YSNewebpayShipping711C2C.php');
+assert_contains('return 10.0', $shipping711, '7-ELEVEN C2C max weight');
+
+$shipping711B2C = read_file('src/Shipping/Newebpay/YSNewebpayShipping711B2C.php');
+assert_contains('return 10.0', $shipping711B2C, '7-ELEVEN B2C max weight');
 
 $requester = read_file('src/Shipping/Newebpay/YSNewebpayShippingRequester.php');
 foreach ([ 'create_order', 'query_status', 'get_print_url', 'modify_order', 'get_shipment_no' ] as $method) {
@@ -163,15 +175,31 @@ assert_contains('ys_ec_newebpay_hash_key', $settings, 'hash key setting');
 assert_contains('YSCrypto::encrypt_for_storage', $settings, 'secret encryption');
 assert_contains("YSAdminApp::open( 'NewebPay', '金物流 / NewebPay'", $settings, 'YS CART admin shell title');
 assert_contains('ys-ec-newebpay', $settings, 'primary admin slug');
+assert_contains('ys_ec_newebpay_tab', $settings, 'tab-aware save field');
+assert_contains("case 'api':", $settings, 'tab-specific API save');
+assert_contains("case 'payment':", $settings, 'tab-specific payment save');
+assert_contains("case 'shipping':", $settings, 'tab-specific shipping save');
 
 $template = read_file('templates/admin/gateways/newebpay-settings.php');
 foreach ([
-    'ysca-card',
-    'ysca-card__body',
-    'ysca-form-grid',
-    'ysca-field',
+    'ysca-page-root',
+    'ys-ec-filters ysca-tabs ysca-tabs--with-indicator',
+    'role="tablist"',
+    'ysca-tab',
+    'API 設定',
+    '金流閘道',
+    '物流閘道',
+    '分期設定',
+    '回呼網址',
+    '交易紀錄',
+    'ysca-switch-label',
+    'ysca-switch-slider',
+    'ysca-card--soft ysca-card--inset',
+    'ysca-inline-actions ysca-inline-actions--start',
     'ysca-input',
-    '物流設定',
+    'API 連線設定',
+    'NewebPay 金流閘道',
+    'NewebPay 物流閘道',
     '7-ELEVEN C2C',
     '全家 C2C',
     '萊爾富 C2C',

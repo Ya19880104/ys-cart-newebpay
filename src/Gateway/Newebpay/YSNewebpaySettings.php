@@ -11,6 +11,15 @@ defined( 'ABSPATH' ) || exit;
 final class YSNewebpaySettings {
 	private const NONCE_ACTION = 'ys_ec_newebpay_save_settings';
 
+	public const TABS = [
+		'api'         => 'API 設定',
+		'payment'     => '金流閘道',
+		'shipping'    => '物流閘道',
+		'installment' => '分期設定',
+		'callbacks'   => '回呼網址',
+		'log'         => '交易紀錄',
+	];
+
 	public const SETTING_KEYS = [
 		'enabled'         => 'ys_ec_newebpay_enabled',
 		'test_mode'       => 'ys_ec_newebpay_test_mode',
@@ -29,7 +38,7 @@ final class YSNewebpaySettings {
 		'cvs_enabled'     => 'ys_ec_newebpay_cvs_enabled',
 		'barcode_enabled' => 'ys_ec_newebpay_barcode_enabled',
 		'linepay_enabled' => 'ys_ec_newebpay_linepay_enabled',
-		'applepay_enabled'=> 'ys_ec_newebpay_applepay_enabled',
+		'applepay_enabled' => 'ys_ec_newebpay_applepay_enabled',
 	];
 
 	public const LOGISTICS_METHODS = [
@@ -168,62 +177,81 @@ final class YSNewebpaySettings {
 
 		check_admin_referer( self::NONCE_ACTION );
 
-		$ec = YSEcommerce::get_instance();
+		$ec  = YSEcommerce::get_instance();
+		$tab = self::sanitize_tab( (string) wp_unslash( $_POST['ys_ec_newebpay_tab'] ?? 'api' ) );
 
-		$checkboxes = [
-			'enabled',
-			'test_mode',
-			'debug_enabled',
-			'credit_enabled',
-			'inst_enabled',
-			'atm_enabled',
-			'cvs_enabled',
-			'barcode_enabled',
-			'linepay_enabled',
-			'applepay_enabled',
-		];
+		switch ( $tab ) {
+			case 'api':
+				foreach ( [ 'enabled', 'test_mode' ] as $alias ) {
+					$key = self::SETTING_KEYS[ $alias ];
+					$ec->update_setting( $key, isset( $_POST[ $key ] ) ? '1' : '0' );
+				}
 
-		foreach ( $checkboxes as $alias ) {
-			$key = self::SETTING_KEYS[ $alias ];
-			$ec->update_setting( $key, isset( $_POST[ $key ] ) ? '1' : '0' );
-		}
+				$merchant_id = sanitize_text_field( wp_unslash( (string) ( $_POST[ self::SETTING_KEYS['merchant_id'] ] ?? '' ) ) );
+				$ec->update_setting( self::SETTING_KEYS['merchant_id'], mb_substr( $merchant_id, 0, 20 ) );
 
-		$merchant_id = sanitize_text_field( wp_unslash( (string) ( $_POST[ self::SETTING_KEYS['merchant_id'] ] ?? '' ) ) );
-		$ec->update_setting( self::SETTING_KEYS['merchant_id'], mb_substr( $merchant_id, 0, 20 ) );
+				$hash_key = sanitize_text_field( wp_unslash( (string) ( $_POST[ self::SETTING_KEYS['hash_key'] ] ?? '' ) ) );
+				if ( '' !== $hash_key ) {
+					$ec->update_setting( self::SETTING_KEYS['hash_key'], YSCrypto::encrypt_for_storage( $hash_key ) );
+				}
 
-		$trade_limit = absint( wp_unslash( (string) ( $_POST[ self::SETTING_KEYS['trade_limit'] ] ?? '0' ) ) );
-		$ec->update_setting( self::SETTING_KEYS['trade_limit'], (string) min( $trade_limit, 9999999 ) );
+				$hash_iv = sanitize_text_field( wp_unslash( (string) ( $_POST[ self::SETTING_KEYS['hash_iv'] ] ?? '' ) ) );
+				if ( '' !== $hash_iv ) {
+					$ec->update_setting( self::SETTING_KEYS['hash_iv'], YSCrypto::encrypt_for_storage( $hash_iv ) );
+				}
+				break;
 
-		foreach ( [ 'atm_expire_days', 'cvs_expire_days', 'bar_expire_days' ] as $alias ) {
-			$value = absint( wp_unslash( (string) ( $_POST[ self::SETTING_KEYS[ $alias ] ] ?? self::default_for( $alias ) ) ) );
-			if ( $value < 1 || $value > 180 ) {
-				$value = (int) self::default_for( $alias );
-			}
-			$ec->update_setting( self::SETTING_KEYS[ $alias ], (string) $value );
-		}
+			case 'payment':
+				foreach ( [ 'credit_enabled', 'atm_enabled', 'cvs_enabled', 'barcode_enabled', 'linepay_enabled', 'applepay_enabled' ] as $alias ) {
+					$key = self::SETTING_KEYS[ $alias ];
+					$ec->update_setting( $key, isset( $_POST[ $key ] ) ? '1' : '0' );
+				}
 
-		$inst_flag = sanitize_text_field( wp_unslash( (string) ( $_POST[ self::SETTING_KEYS['inst_flag'] ] ?? '3,6,12' ) ) );
-		$inst_flag = preg_replace( '/[^0-9,]/', '', $inst_flag ) ?: '3,6,12';
-		$ec->update_setting( self::SETTING_KEYS['inst_flag'], mb_substr( $inst_flag, 0, 64 ) );
+				$trade_limit = absint( wp_unslash( (string) ( $_POST[ self::SETTING_KEYS['trade_limit'] ] ?? '0' ) ) );
+				$ec->update_setting( self::SETTING_KEYS['trade_limit'], (string) min( $trade_limit, 9999999 ) );
 
-		$hash_key = sanitize_text_field( wp_unslash( (string) ( $_POST[ self::SETTING_KEYS['hash_key'] ] ?? '' ) ) );
-		if ( '' !== $hash_key ) {
-			$ec->update_setting( self::SETTING_KEYS['hash_key'], YSCrypto::encrypt_for_storage( $hash_key ) );
-		}
+				foreach ( [ 'atm_expire_days', 'cvs_expire_days', 'bar_expire_days' ] as $alias ) {
+					$value = absint( wp_unslash( (string) ( $_POST[ self::SETTING_KEYS[ $alias ] ] ?? self::default_for( $alias ) ) ) );
+					if ( $value < 1 || $value > 180 ) {
+						$value = (int) self::default_for( $alias );
+					}
+					$ec->update_setting( self::SETTING_KEYS[ $alias ], (string) $value );
+				}
+				break;
 
-		$hash_iv = sanitize_text_field( wp_unslash( (string) ( $_POST[ self::SETTING_KEYS['hash_iv'] ] ?? '' ) ) );
-		if ( '' !== $hash_iv ) {
-			$ec->update_setting( self::SETTING_KEYS['hash_iv'], YSCrypto::encrypt_for_storage( $hash_iv ) );
-		}
+			case 'shipping':
+				foreach ( self::LOGISTICS_METHODS as $method_id => $label ) {
+					unset( $label );
+					$field = 'shipping_' . $method_id . '_enabled';
+					$ec->update_setting( $field, isset( $_POST[ $field ] ) ? '1' : '0' );
+				}
+				break;
 
-		foreach ( self::LOGISTICS_METHODS as $method_id => $label ) {
-			unset( $label );
-			$field = 'shipping_' . $method_id . '_enabled';
-			$ec->update_setting( $field, isset( $_POST[ $field ] ) ? '1' : '0' );
+			case 'installment':
+				$key = self::SETTING_KEYS['inst_enabled'];
+				$ec->update_setting( $key, isset( $_POST[ $key ] ) ? '1' : '0' );
+
+				$inst_flag = sanitize_text_field( wp_unslash( (string) ( $_POST[ self::SETTING_KEYS['inst_flag'] ] ?? '3,6,12' ) ) );
+				$inst_flag = preg_replace( '/[^0-9,]/', '', $inst_flag ) ?: '3,6,12';
+				$ec->update_setting( self::SETTING_KEYS['inst_flag'], mb_substr( $inst_flag, 0, 64 ) );
+				break;
+
+			case 'log':
+				$key = self::SETTING_KEYS['debug_enabled'];
+				$ec->update_setting( $key, isset( $_POST[ $key ] ) ? '1' : '0' );
+				break;
 		}
 
 		$redirect = wp_get_referer() ?: admin_url( 'admin.php?page=ys-ec-newebpay' );
-		wp_safe_redirect( add_query_arg( 'ys_ec_newebpay_saved', '1', $redirect ) );
+		wp_safe_redirect(
+			add_query_arg(
+				[
+					'tab'   => $tab,
+					'saved' => '1',
+				],
+				$redirect
+			)
+		);
 		exit;
 	}
 
@@ -232,13 +260,17 @@ final class YSNewebpaySettings {
 			wp_die( esc_html__( 'Permission denied.', 'ys-cart-newebpay' ), 403 );
 		}
 
-		$settings        = self::get_settings_for_render();
-		$hash_key_is_set = (bool) ( $settings['hash_key_is_set'] ?? false );
-		$hash_iv_is_set  = (bool) ( $settings['hash_iv_is_set'] ?? false );
-		$nonce_action    = self::NONCE_ACTION;
-		$notify_url      = YSNewebpayCallbackControllerProxy::notify_url();
-		$return_url      = YSNewebpayCallbackControllerProxy::return_url();
-		$store_callback_url = rest_url( 'ys-ecommerce/v1/newebpay/store-callback' );
+		$settings            = self::get_settings_for_render();
+		$hash_key_is_set     = (bool) ( $settings['hash_key_is_set'] ?? false );
+		$hash_iv_is_set      = (bool) ( $settings['hash_iv_is_set'] ?? false );
+		$nonce_action        = self::NONCE_ACTION;
+		$tab                 = self::sanitize_tab( (string) ( $_GET['tab'] ?? 'api' ) );
+		$tabs                = self::TABS;
+		$page_url            = admin_url( 'admin.php?page=ys-ec-newebpay' );
+		$saved               = ( isset( $_GET['saved'] ) && '1' === (string) $_GET['saved'] ) || isset( $_GET['ys_ec_newebpay_saved'] );
+		$notify_url          = YSNewebpayCallbackControllerProxy::notify_url();
+		$return_url          = YSNewebpayCallbackControllerProxy::return_url();
+		$store_callback_url  = rest_url( 'ys-ecommerce/v1/newebpay/store-callback' );
 		$shipping_notify_url = rest_url( 'ys-ecommerce/v1/newebpay/shipping-notify' );
 
 		if ( class_exists( YSAdminApp::class ) ) {
@@ -259,6 +291,11 @@ final class YSNewebpaySettings {
 
 	public static function get_nonce_action(): string {
 		return self::NONCE_ACTION;
+	}
+
+	private static function sanitize_tab( string $tab ): string {
+		$tab = sanitize_key( $tab );
+		return isset( self::TABS[ $tab ] ) ? $tab : 'api';
 	}
 }
 

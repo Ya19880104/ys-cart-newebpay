@@ -110,7 +110,29 @@ final class YSNewebpayStoreSelector {
 	 * @return array<string,mixed>|false
 	 */
 	private static function find_map_data_by_order_no( string $merchant_order_no ) {
-		unset( $merchant_order_no );
+		global $wpdb;
+
+		$merchant_order_no = sanitize_text_field( $merchant_order_no );
+		if ( '' === $merchant_order_no || ! isset( $wpdb ) ) {
+			return false;
+		}
+
+		$like = $wpdb->esc_like( '_transient_ys_ec_newebpay_map_' ) . '%';
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE %s LIMIT 100",
+				$like
+			),
+			ARRAY_A
+		);
+
+		foreach ( (array) $rows as $row ) {
+			$map_data = maybe_unserialize( $row['option_value'] ?? '' );
+			if ( is_array( $map_data ) && $merchant_order_no === (string) ( $map_data['merchant_order_no'] ?? '' ) ) {
+				return $map_data;
+			}
+		}
+
 		return false;
 	}
 
@@ -127,6 +149,13 @@ final class YSNewebpayStoreSelector {
 		<script>
 		(function() {
 			var storeData = <?php echo $json_data; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
+			storeData._timestamp = Date.now();
+			var serialized = JSON.stringify(storeData);
+			try {
+				localStorage.setItem('ys_ec_selected_store', serialized);
+			} catch (e) {
+				try { sessionStorage.setItem('ys_ec_selected_store', serialized); } catch (e2) {}
+			}
 			if (window.opener) {
 				window.opener.postMessage({
 					type: 'ys_ec_store_selected',
