@@ -91,6 +91,12 @@ final class YSNewebpayStoreSelector {
 			wp_die( 'Store selection expired.', 'NewebPay Store Callback', [ 'response' => 400 ] );
 		}
 
+		$shipping_id = sanitize_key( (string) ( $map_data['shipping_id'] ?? '' ) );
+		if ( '' === $shipping_id || ! YSNewebpaySettings::is_logistics_method_enabled( $shipping_id ) ) {
+			YSLogger::warning( 'newebpay_store', 'Store callback rejected because shipping method is disabled.', [ 'shipping_id' => $shipping_id ] );
+			wp_die( 'Shipping method disabled.', 'NewebPay Store Callback', [ 'response' => 403 ] );
+		}
+
 		$store_info = [
 			'provider' => 'newebpay',
 			'store_id'      => sanitize_text_field( (string) ( $data['StoreID'] ?? '' ) ),
@@ -99,7 +105,7 @@ final class YSNewebpayStoreSelector {
 			'store_phone'   => sanitize_text_field( (string) ( $data['StoreTel'] ?? '' ) ),
 			'lgs_type'      => sanitize_text_field( (string) ( $data['LgsType'] ?? $map_data['lgs_type'] ?? '' ) ),
 			'ship_type'     => sanitize_text_field( (string) ( $data['ShipType'] ?? $map_data['ship_type'] ?? '' ) ),
-			'shipping_id'   => sanitize_key( (string) ( $map_data['shipping_id'] ?? '' ) ),
+			'shipping_id'   => $shipping_id,
 			'selected_at'   => current_time( 'mysql' ),
 		];
 

@@ -8,8 +8,8 @@ final class YSNewebpayBarcodeGateway extends YSNewebpayGatewayBase {
 	public function __construct() {
 		$this->gateway_id        = 'ys_ec_newebpay_barcode';
 		$this->method_key        = 'barcode';
-		$this->title             = 'NewebPay Barcode';
-		$this->description       = 'Generate a barcode payment slip through NewebPay MPG.';
+		$this->title             = '藍新超商條碼';
+		$this->description       = '透過藍新 MPG 產生超商條碼付款資訊。';
 		$this->method_max_amount = 40000;
 	}
 

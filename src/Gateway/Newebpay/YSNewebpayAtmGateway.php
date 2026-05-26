@@ -8,8 +8,8 @@ final class YSNewebpayAtmGateway extends YSNewebpayGatewayBase {
 	public function __construct() {
 		$this->gateway_id        = 'ys_ec_newebpay_atm';
 		$this->method_key        = 'atm';
-		$this->title             = 'NewebPay ATM';
-		$this->description       = 'Generate a virtual ATM account through NewebPay MPG.';
+		$this->title             = '藍新 ATM 虛擬帳號';
+		$this->description       = '透過藍新 MPG 產生 ATM 虛擬帳號。';
 		$this->method_max_amount = 50000;
 	}
 

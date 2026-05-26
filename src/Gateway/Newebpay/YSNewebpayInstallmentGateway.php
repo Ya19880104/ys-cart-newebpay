@@ -8,8 +8,8 @@ final class YSNewebpayInstallmentGateway extends YSNewebpayGatewayBase {
 	public function __construct() {
 		$this->gateway_id  = 'ys_ec_newebpay_installment';
 		$this->method_key  = 'inst';
-		$this->title       = 'NewebPay Installment';
-		$this->description = 'Pay by credit-card installment through NewebPay MPG.';
+		$this->title       = '藍新信用卡分期';
+		$this->description = '透過藍新 MPG 使用信用卡分期付款。';
 	}
 
 	protected function get_mpg_options(): array {

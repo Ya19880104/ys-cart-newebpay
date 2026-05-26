@@ -29,7 +29,7 @@ abstract class YSNewebpayShipping implements YSShippingInterface {
 	}
 
 	public function is_enabled(): bool {
-		return '1' === (string) $this->get_option( 'enabled', '0' );
+		return YSNewebpaySettings::is_logistics_method_enabled( $this->id );
 	}
 
 	public function is_available( array $order_data ): bool {
@@ -88,16 +88,16 @@ abstract class YSNewebpayShipping implements YSShippingInterface {
 	 */
 	public function get_settings_fields(): array {
 		return [
-			'enabled' => [
+			'enabled'        => [
 				'type'    => 'checkbox',
 				'label'   => '啟用',
 				'default' => '0',
 			],
-			'base_fee' => [
+			'base_fee'       => [
 				'type'    => 'number',
 				'label'   => '基本運費',
 				'default' => '60',
-				'desc'    => '新台幣金額。',
+				'desc'    => '此物流方式的固定運費。',
 			],
 			'free_threshold' => [
 				'type'    => 'number',
@@ -105,17 +105,17 @@ abstract class YSNewebpayShipping implements YSShippingInterface {
 				'default' => '0',
 				'desc'    => '0 表示不啟用免運。',
 			],
-			'max_amount' => [
+			'max_amount'     => [
 				'type'    => 'number',
 				'label'   => '最高訂單金額',
 				'default' => '20000',
-				'desc'    => '藍新超商取貨金額上限預設為 20,000。',
+				'desc'    => '藍新超商取貨通常有最高金額限制。',
 			],
-			'max_weight' => [
+			'max_weight'     => [
 				'type'    => 'number',
 				'label'   => '最高重量 kg',
 				'default' => (string) $this->get_default_max_weight(),
-				'desc'    => '0 表示不限制。',
+				'desc'    => '0 表示不限制重量。',
 			],
 		];
 	}

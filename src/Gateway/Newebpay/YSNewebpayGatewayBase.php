@@ -94,7 +94,7 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 
 		return [
 			'success' => false,
-			'message' => 'NewebPay token charging is not supported by this provider.',
+			'message' => '藍新目前不支援訂閱扣款。',
 		];
 	}
 
@@ -107,7 +107,7 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 		if ( ! $order ) {
 			return [
 				'success' => false,
-				'message' => 'Order not found.',
+				'message' => '找不到訂單。',
 			];
 		}
 
@@ -115,7 +115,7 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 		if ( ! $client->is_configured() ) {
 			return [
 				'success' => false,
-				'message' => 'NewebPay settings are incomplete.',
+				'message' => '藍新金流設定尚未完成。',
 			];
 		}
 
@@ -123,7 +123,7 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 		if ( $amount <= 0 ) {
 			return [
 				'success' => false,
-				'message' => 'Order amount is invalid.',
+				'message' => '訂單金額無效。',
 			];
 		}
 
@@ -131,7 +131,7 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 		if ( $max_amount > 0 && $amount > $max_amount ) {
 			return [
 				'success' => false,
-				'message' => sprintf( 'This NewebPay method supports orders up to NT$%d.', (int) $max_amount ),
+				'message' => sprintf( '此藍新付款方式最高支援 NT$%d。', (int) $max_amount ),
 			];
 		}
 
@@ -157,7 +157,7 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 		if ( empty( $form_data['fields']['TradeInfo'] ) || empty( $form_data['fields']['TradeSha'] ) ) {
 			return [
 				'success' => false,
-				'message' => 'Unable to build NewebPay payment form.',
+				'message' => '無法建立藍新付款表單。',
 			];
 		}
 
@@ -208,14 +208,14 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 		if ( ! $order ) {
 			return [
 				'success' => false,
-				'message' => 'Order not found.',
+				'message' => '找不到訂單。',
 			];
 		}
 
 		if ( ! in_array( $this->method_key, [ 'credit', 'inst', 'linepay', 'applepay' ], true ) ) {
 			return [
 				'success' => false,
-				'message' => 'This NewebPay method does not support online refunds.',
+				'message' => '此藍新付款方式不支援線上退款。',
 			];
 		}
 
@@ -223,7 +223,7 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 		if ( $refund_amount <= 0 ) {
 			return [
 				'success' => false,
-				'message' => 'Refund amount is invalid.',
+				'message' => '退款金額無效。',
 			];
 		}
 
@@ -238,7 +238,7 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 		if ( '' === $merchant_order_no ) {
 			return [
 				'success' => false,
-				'message' => 'Missing NewebPay merchant order number.',
+				'message' => '缺少藍新商店訂單編號。',
 			];
 		}
 
@@ -258,7 +258,7 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 				return [
 					'success'        => true,
 					'transaction_id' => (string) ( $entry['refund_order_id'] ?? $merchant_order_no ),
-					'message'        => 'Refund already processed.',
+					'message'        => '退款已處理。',
 				];
 			}
 		}
@@ -285,13 +285,13 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 			return [
 				'success'        => true,
 				'transaction_id' => $merchant_order_no,
-				'message'        => 'NewebPay refund request accepted.',
+				'message'        => '藍新退款請求已送出。',
 			];
 		}
 
 		return [
 			'success' => false,
-			'message' => (string) ( $result['message'] ?? 'NewebPay refund failed.' ),
+			'message' => (string) ( $result['message'] ?? '藍新退款失敗。' ),
 		];
 	}
 

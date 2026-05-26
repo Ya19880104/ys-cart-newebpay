@@ -7,6 +7,7 @@ $plugin = (string) file_get_contents($root . '/src/Plugin.php');
 $settings = (string) file_get_contents($root . '/src/Gateway/Newebpay/YSNewebpaySettings.php');
 $store = (string) file_get_contents($root . '/src/Shipping/Newebpay/YSNewebpayStoreSelector.php');
 $main = (string) file_get_contents($root . '/ys-cart-newebpay.php');
+$manifest = (string) file_get_contents($root . '/manifest.php');
 
 function v102_assert_contains(string $needle, string $haystack, string $label): void {
     if (false === strpos($haystack, $needle)) {
@@ -51,12 +52,24 @@ $gateway_body  = v102_method_body($plugin, 'register_gateways');
 $shipping_body = v102_method_body($plugin, 'register_shipping_methods');
 $map_body      = v102_method_body($plugin, 'newebpay_map_url');
 
-v102_assert_contains('YSNewebpaySettings::is_global_enabled()', $gateway_body, 'gateway registration checks global provider switch');
-v102_assert_contains('YSNewebpaySettings::is_global_enabled()', $shipping_body, 'shipping registration checks global provider switch');
+v102_assert_contains("add_filter( 'ys_ec_provider_manifests'", $plugin, 'provider registers manifest');
+v102_assert_contains("'id'                 => 'ys_newebpay'", $manifest, 'manifest declares provider id');
+v102_assert_contains("'slug'                => 'ys-provider-newebpay'", $manifest, 'manifest declares lifecycle settings page');
+if (false !== strpos($plugin, 'ys_ec_providers') || false !== strpos($plugin, 'ys_ec_admin_payment_menus')) {
+    fwrite(STDERR, "[FAIL] provider must not use legacy provider/menu hooks\n");
+    exit(1);
+}
+echo "[PASS] provider no longer uses legacy provider/menu hooks\n";
+v102_assert_contains('is_payment_enabled()', $gateway_body, 'gateway registration checks payment capability');
+v102_assert_contains('is_shipping_enabled()', $shipping_body, 'shipping registration checks shipping capability');
+v102_assert_contains("is_capability_enabled( 'ys_newebpay', 'payment'", $plugin, 'payment capability uses lifecycle state');
+v102_assert_contains("is_capability_enabled( 'ys_newebpay', 'shipping'", $plugin, 'shipping capability uses lifecycle state');
 v102_assert_contains('function is_logistics_method_enabled', $settings, 'settings expose per-logistics registration gate');
-v102_assert_contains('YSNewebpaySettings::is_logistics_method_enabled', $shipping_body, 'shipping registration checks each logistics method switch');
-v102_assert_contains('YSNewebpaySettings::is_global_enabled()', $map_body, 'store map route checks global provider switch');
+v102_assert_contains("is_method_enabled( 'shipping', \$method_id", $shipping_body, 'shipping registration checks each lifecycle method switch');
+v102_assert_contains("is_method_enabled( 'payment', \$method_id", $gateway_body, 'gateway registration checks each lifecycle method switch');
+v102_assert_contains('is_shipping_enabled()', $map_body, 'store map route checks shipping capability');
 v102_assert_contains('provider_disabled', $map_body, 'store map route returns provider-disabled error');
+v102_assert_contains("is_method_enabled( 'shipping', \$shipping_id", $map_body, 'store map route checks selected lifecycle method state');
 
 $shipping_methods = [
     'ys_ec_newebpay_ship_711_c2c' => 'YSNewebpayShipping711C2C',
@@ -79,7 +92,7 @@ v102_assert_contains('YSShippingRegistry::register( new $method_class() )', $shi
 
 v102_assert_contains('use YangSheep\\YSCartNewebpay\\Gateway\\Newebpay\\YSNewebpaySettings;', $store, 'store selector imports settings');
 v102_assert_contains('YSNewebpaySettings::is_logistics_method_enabled( $shipping_id )', $store, 'store selector checks selected logistics method switch');
-v102_assert_contains('Version: 1.0.5', $main, 'plugin header version bumped');
-v102_assert_contains("YS_CART_NEWEBPAY_VERSION', '1.0.5'", $main, 'plugin constant version bumped');
+v102_assert_contains('Version: 1.0.6', $main, 'plugin header version bumped');
+v102_assert_contains("YS_CART_NEWEBPAY_VERSION', '1.0.6'", $main, 'plugin constant version bumped');
 
 echo "REGRESSION v102_newebpay_registration_scope PASS\n";
