@@ -3,7 +3,7 @@
  * Plugin Name: YS CART - NewebPay
  * Plugin URI: https://github.com/Ya19880104/ys-cart-newebpay
  * Description: Adds NewebPay MPG payment and official logistics methods to YS CART as an external provider plugin.
- * Version: 1.0.6
+ * Version: 1.0.7
  * Author: YangSheep
  * Author URI: https://yangsheep.com.tw
  * Requires PHP: 8.1
@@ -13,7 +13,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'YS_CART_NEWEBPAY_VERSION', '1.0.6' );
+define( 'YS_CART_NEWEBPAY_VERSION', '1.0.7' );
 define( 'YS_CART_NEWEBPAY_FILE', __FILE__ );
 define( 'YS_CART_NEWEBPAY_DIR', plugin_dir_path( __FILE__ ) );
 define( 'YS_CART_NEWEBPAY_URL', plugin_dir_url( __FILE__ ) );

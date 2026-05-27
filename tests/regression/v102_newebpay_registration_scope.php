@@ -18,6 +18,15 @@ function v102_assert_contains(string $needle, string $haystack, string $label): 
     echo "[PASS] {$label}\n";
 }
 
+function v102_assert_true(bool $condition, string $label): void {
+    if (!$condition) {
+        fwrite(STDERR, "[FAIL] {$label}\n");
+        exit(1);
+    }
+
+    echo "[PASS] {$label}\n";
+}
+
 function v102_method_body(string $source, string $method): string {
     $offset = strpos($source, "function {$method}");
     if (false === $offset) {
@@ -92,7 +101,8 @@ v102_assert_contains('YSShippingRegistry::register( new $method_class() )', $shi
 
 v102_assert_contains('use YangSheep\\YSCartNewebpay\\Gateway\\Newebpay\\YSNewebpaySettings;', $store, 'store selector imports settings');
 v102_assert_contains('YSNewebpaySettings::is_logistics_method_enabled( $shipping_id )', $store, 'store selector checks selected logistics method switch');
-v102_assert_contains('Version: 1.0.6', $main, 'plugin header version bumped');
-v102_assert_contains("YS_CART_NEWEBPAY_VERSION', '1.0.6'", $main, 'plugin constant version bumped');
+preg_match('/Version:\s*([0-9.]+)/', $main, $version_match);
+preg_match("/YS_CART_NEWEBPAY_VERSION', '([0-9.]+)'/", $main, $constant_match);
+v102_assert_true(version_compare((string) ($version_match[1] ?? ''), '1.0.6', '>=') && version_compare((string) ($constant_match[1] ?? ''), '1.0.6', '>='), 'plugin version is at least 1.0.6');
 
 echo "REGRESSION v102_newebpay_registration_scope PASS\n";
