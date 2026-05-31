@@ -17,6 +17,7 @@ use YangSheep\YSCartNewebpay\Gateway\Newebpay\YSNewebpayCreditGateway;
 use YangSheep\YSCartNewebpay\Gateway\Newebpay\YSNewebpayCvsGateway;
 use YangSheep\YSCartNewebpay\Gateway\Newebpay\YSNewebpayInstallmentGateway;
 use YangSheep\YSCartNewebpay\Gateway\Newebpay\YSNewebpayLinePayGateway;
+use YangSheep\YSCartNewebpay\Gateway\Newebpay\YSNewebpayPaymentReconciler;
 use YangSheep\YSCartNewebpay\Gateway\Newebpay\YSNewebpaySettings;
 use YangSheep\YSCartNewebpay\Services\Shipping\Adapters\YSNewebpayAdapter;
 use YangSheep\YSCartNewebpay\Shipping\Newebpay\YSNewebpayShipping;
@@ -67,6 +68,7 @@ final class Plugin {
 		add_action( 'ys_ec_register_shipping_methods', [ $this, 'register_shipping_methods' ] );
 		add_action( 'ys_ec_register_admin_rest_routes', [ $this, 'register_admin_routes' ] );
 		add_action( 'ys_ec_register_storefront_routes', [ $this, 'register_storefront_routes' ] );
+		add_action( 'ys_ec_register_payment_reconcilers', [ $this, 'register_payment_reconcilers' ] );
 		add_action( 'rest_api_init', [ $this, 'register_public_routes' ] );
 		add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_store_selector_bridge' ] );
 		add_filter( 'ys_ec_shipping_requester', [ $this, 'register_shipping_requester' ], 10, 2 );
@@ -117,6 +119,22 @@ final class Plugin {
 				YSGatewayRegistry::register( new $gateway_class() );
 			}
 		}
+	}
+
+	public function register_payment_reconcilers( $registry ): void {
+		if ( ! $this->has_enabled_payment_methods()
+			|| ! is_object( $registry )
+			|| ! method_exists( $registry, 'register' )
+			|| ! interface_exists( '\YangSheep\Ecommerce\Services\Payment\YSPaymentReconcilerInterface' ) ) {
+			return;
+		}
+
+		$client = new \YangSheep\YSCartNewebpay\Gateway\Newebpay\YSNewebpayClient();
+		if ( ! $client->is_configured() ) {
+			return;
+		}
+
+		$registry->register( new YSNewebpayPaymentReconciler( $client ) );
 	}
 
 	public function register_shipping_methods(): void {

@@ -171,6 +171,7 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 		$payment_detail['newebpay_test_mode']         = $client->is_test_mode() ? '1' : '0';
 		$payment_detail['newebpay_form_created_at']   = current_time( 'mysql' );
 		$payment_detail['mer_trade_no']               = $merchant_order_no;
+		$payment_detail['payment_provider']           = 'newebpay';
 
 		YSOrder::update(
 			$order_id,
