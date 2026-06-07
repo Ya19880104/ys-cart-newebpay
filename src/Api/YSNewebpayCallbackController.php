@@ -123,29 +123,36 @@ final class YSNewebpayCallbackController {
 
 		if ( preg_match( '/^YS(\d+)T\d+$/', $merchant_order_no, $matches ) ) {
 			$order = YSOrder::find( (int) $matches[1] );
-			if ( $order ) {
+			if ( $order && self::order_has_merchant_order_no( $order, $merchant_order_no ) ) {
 				return $order;
 			}
 		}
 
-		$order = YSOrder::find_by_number( $merchant_order_no );
-		if ( $order ) {
-			return $order;
-		}
-
 		global $wpdb;
 		$table = YSOrder::table();
-		$like  = '%' . $wpdb->esc_like( $merchant_order_no ) . '%';
 
 		$row = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE gateway_trade_no = %s OR payment_detail LIKE %s ORDER BY id DESC LIMIT 1",
+				"SELECT * FROM {$table}
+				 WHERE JSON_UNQUOTE(JSON_EXTRACT(payment_detail, '$.newebpay_merchant_order_no')) = %s
+				    OR JSON_UNQUOTE(JSON_EXTRACT(payment_detail, '$.mer_trade_no')) = %s
+				 ORDER BY id DESC LIMIT 1",
 				$merchant_order_no,
-				$like
+				$merchant_order_no
 			)
 		);
 
 		return $row ?: null;
+	}
+
+	private static function order_has_merchant_order_no( object $order, string $merchant_order_no ): bool {
+		$detail = json_decode( (string) ( $order->payment_detail ?? '{}' ), true );
+		if ( ! is_array( $detail ) ) {
+			return false;
+		}
+
+		return hash_equals( (string) ( $detail['newebpay_merchant_order_no'] ?? '' ), $merchant_order_no )
+			|| hash_equals( (string) ( $detail['mer_trade_no'] ?? '' ), $merchant_order_no );
 	}
 
 	private static function json_error( string $message, int $status ): \WP_REST_Response {
