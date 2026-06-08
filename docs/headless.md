@@ -29,6 +29,27 @@ After checkout succeeds, the API response includes `form_data`:
 
 Submit those fields as a regular HTML `POST` form in the top-level browser window. NewebPay MPG should not be loaded through an iframe or proxy.
 
+## Convenience-store store selection
+
+For NewebPay logistics methods, request a store-map form from YS CART before
+sending the customer to NewebPay store selection:
+
+```text
+POST /wp-json/ys-ecommerce-headless/v1/stores/newebpay/map-url
+```
+
+Expected payload:
+
+```json
+{
+  "shipping_id": "ys_ec_newebpay_ship_711_c2c"
+}
+```
+
+The response contains `action_url` and hidden `fields`. Submit the returned form
+in the top-level browser window or a popup; do not call the store callback route
+from browser UI.
+
 Convenience-store logistics data returned by NewebPay callbacks is normalized to:
 
 ```json

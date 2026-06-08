@@ -41,6 +41,28 @@ Set these in NewebPay if the merchant portal requires explicit URLs:
 - Shipping notify: `/wp-json/ys-ecommerce/v1/newebpay/shipping-notify`
 
 The plugin also sends these URLs in each MPG request.
+Store callback and shipping notify routes are provider-facing callback routes
+and should not be called by browser UI.
+
+## Headless logistics
+
+For convenience-store logistics, request the YS CART store-map route with the
+selected shipping method ID:
+
+```json
+{
+  "shipping_id": "ys_ec_newebpay_ship_711_c2c"
+}
+```
+
+Route:
+
+```text
+POST /wp-json/ys-ecommerce-headless/v1/stores/newebpay/map-url
+```
+
+Submit the returned `action_url` and `fields` as a top-level browser form post
+or popup form post.
 
 ## Release
 
