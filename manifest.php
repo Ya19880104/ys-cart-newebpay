@@ -91,10 +91,10 @@ return [
 		'icon'                => 'dashicons-money-alt',
 	],
 	'callback_routes'    => [
-		'payment_notify'  => [ 'namespace' => 'ys-ecommerce/v1', 'route' => '/newebpay/notify', 'methods' => [ 'POST' ], 'signature_scheme' => 'newebpay_aes_hash' ],
-		'payment_return'  => [ 'namespace' => 'ys-ecommerce/v1', 'route' => '/newebpay/return', 'methods' => [ 'GET', 'POST' ], 'signature_scheme' => 'newebpay_aes_hash' ],
-		'shipping_notify' => [ 'namespace' => 'ys-ecommerce/v1', 'route' => '/newebpay/shipping-notify', 'methods' => [ 'POST' ], 'signature_scheme' => 'newebpay_aes_hash' ],
-		'store_callback'  => [ 'namespace' => 'ys-ecommerce/v1', 'route' => '/newebpay/store-callback', 'methods' => [ 'POST' ], 'signature_scheme' => 'newebpay_aes_hash' ],
+		'payment_notify'  => [ 'namespace' => 'ys-ecommerce/v1', 'route' => '/newebpay/notify', 'methods' => [ 'POST' ], 'permission_callback' => [ \YangSheep\YSCartNewebpay\Api\YSNewebpayCallbackController::class, 'notify_permission' ], 'signature_scheme' => 'newebpay_aes_hash' ],
+		'payment_return'  => [ 'namespace' => 'ys-ecommerce/v1', 'route' => '/newebpay/return', 'methods' => [ 'GET', 'POST' ], 'permission_callback' => [ \YangSheep\YSCartNewebpay\Api\YSNewebpayCallbackController::class, 'return_permission' ], 'signature_scheme' => 'newebpay_aes_hash' ],
+		'shipping_notify' => [ 'namespace' => 'ys-ecommerce/v1', 'route' => '/newebpay/shipping-notify', 'methods' => [ 'POST' ], 'permission_callback' => [ \YangSheep\YSCartNewebpay\Api\YSNewebpayShippingNotifyController::class, 'notify_permission' ], 'signature_scheme' => 'newebpay_aes_hash' ],
+		'store_callback'  => [ 'namespace' => 'ys-ecommerce/v1', 'route' => '/newebpay/store-callback', 'methods' => [ 'POST' ], 'permission_callback' => [ \YangSheep\YSCartNewebpay\Plugin::class, 'store_callback_permission' ], 'signature_scheme' => 'newebpay_aes_hash' ],
 	],
 	'allowed_hosts'      => [
 		'ccore.newebpay.com',

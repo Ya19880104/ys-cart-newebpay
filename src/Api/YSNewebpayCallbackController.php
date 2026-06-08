@@ -3,6 +3,7 @@
 namespace YangSheep\YSCartNewebpay\Api;
 
 use YangSheep\Ecommerce\Models\YSOrder;
+use YangSheep\Ecommerce\Security\YSInboundPermission;
 use YangSheep\Ecommerce\Security\YSRateLimiter;
 use YangSheep\Ecommerce\Security\YSWebhookGuard;
 use YangSheep\Ecommerce\Utils\YSLogger;
@@ -22,7 +23,7 @@ final class YSNewebpayCallbackController {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ __CLASS__, 'handle_notify' ],
-				'permission_callback' => '__return_true',
+				'permission_callback' => [ __CLASS__, 'notify_permission' ],
 			]
 		);
 
@@ -32,9 +33,35 @@ final class YSNewebpayCallbackController {
 			[
 				'methods'             => [ 'GET', 'POST' ],
 				'callback'            => [ __CLASS__, 'handle_return' ],
-				'permission_callback' => '__return_true',
+				'permission_callback' => [ __CLASS__, 'return_permission' ],
 			]
 		);
+	}
+
+	public static function notify_permission( \WP_REST_Request $request ) {
+		return self::inbound_permission( 'newebpay_notify', [
+			'body_max_bytes' => self::MAX_BODY_BYTES,
+			'rate_limit'     => [ 300, 60 ],
+			'allowed_types'  => [ 'application/x-www-form-urlencoded' ],
+		], $request );
+	}
+
+	public static function return_permission( \WP_REST_Request $request ) {
+		return self::inbound_permission( 'newebpay_return', [
+			'body_max_bytes' => self::MAX_BODY_BYTES,
+			'rate_limit'     => [ 600, 60 ],
+			'allowed_types'  => [],
+			'verify_ip'      => false,
+		], $request );
+	}
+
+	private static function inbound_permission( string $context, array $opts, \WP_REST_Request $request ) {
+		if ( ! class_exists( YSInboundPermission::class ) ) {
+			return true;
+		}
+
+		$callback = YSInboundPermission::build( $context, $opts );
+		return $callback( $request );
 	}
 
 	public static function handle_notify( \WP_REST_Request $request ): \WP_REST_Response {

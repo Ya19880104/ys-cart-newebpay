@@ -4,6 +4,7 @@ namespace YangSheep\YSCartNewebpay\Api;
 
 use YangSheep\Ecommerce\Handlers\YSShippingHandler;
 use YangSheep\Ecommerce\Models\YSOrder;
+use YangSheep\Ecommerce\Security\YSInboundPermission;
 use YangSheep\Ecommerce\Security\YSRateLimiter;
 use YangSheep\Ecommerce\Security\YSWebhookGuard;
 use YangSheep\Ecommerce\Utils\YSLogger;
@@ -22,9 +23,22 @@ final class YSNewebpayShippingNotifyController {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ __CLASS__, 'handle_notify' ],
-				'permission_callback' => '__return_true',
+				'permission_callback' => [ __CLASS__, 'notify_permission' ],
 			]
 		);
+	}
+
+	public static function notify_permission( \WP_REST_Request $request ) {
+		if ( ! class_exists( YSInboundPermission::class ) ) {
+			return true;
+		}
+
+		$callback = YSInboundPermission::build( 'newebpay_shipping_notify', [
+			'body_max_bytes' => self::MAX_BODY_BYTES,
+			'rate_limit'     => [ 300, 60 ],
+			'allowed_types'  => [ 'application/x-www-form-urlencoded' ],
+		] );
+		return $callback( $request );
 	}
 
 	public static function handle_notify( \WP_REST_Request $request ): \WP_REST_Response {
