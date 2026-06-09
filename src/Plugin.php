@@ -223,6 +223,8 @@ final class Plugin {
 	public function newebpay_map_url( \WP_REST_Request $request ): \WP_REST_Response {
 		$params      = class_exists( YSRequestParser::class ) ? YSRequestParser::params( $request ) : $request->get_params();
 		$shipping_id = sanitize_text_field( (string) ( $params['shipping_id'] ?? $params['shipping_method'] ?? '' ) );
+		$cart_scope  = self::sanitize_cart_scope( (string) ( $params['cart_scope'] ?? 'default' ) );
+		$return_url  = esc_url_raw( (string) ( $params['return_url'] ?? '' ) );
 
 		if ( ! $this->is_shipping_enabled() ) {
 			return YSRestResponder::error( 'provider_disabled', '藍新物流尚未啟用。' );
@@ -236,12 +238,21 @@ final class Plugin {
 			return YSRestResponder::error( 'shipping_method_disabled', '藍新物流方式尚未啟用。' );
 		}
 
-		$result = YSNewebpayStoreSelector::build_map_form_data( $shipping_id );
+		$result = YSNewebpayStoreSelector::build_map_form_data( $shipping_id, $cart_scope, $return_url );
 		if ( $result ) {
 			return YSRestResponder::success( 'map_url_ready', '', $result );
 		}
 
 		return YSRestResponder::error( 'map_url_failed', '藍新物流 API 設定尚未完成。' );
+	}
+
+	private static function sanitize_cart_scope( string $scope ): string {
+		$scope = sanitize_key( $scope );
+		if ( '' === $scope || ! preg_match( '/^[a-z0-9_]{1,32}$/', $scope ) ) {
+			return 'default';
+		}
+
+		return $scope;
 	}
 
 	public function enqueue_store_selector_bridge(): void {

@@ -15,6 +15,16 @@
 		}).then(function (res) { return res.json(); });
 	}
 
+	function resolveCartScope() {
+		var scope = '';
+		try {
+			scope = new URLSearchParams(window.location.search).get('cart_scope') || '';
+		} catch (e) {}
+
+		scope = String(scope || 'default').toLowerCase().replace(/[^a-z0-9_]/g, '');
+		return scope || 'default';
+	}
+
 	function openMapViaForm(actionUrl, fields) {
 		var popupName = 'ys_ec_newebpay_store_map';
 		window.open('', popupName, 'width=1100,height=760,scrollbars=yes,resizable=yes');
@@ -60,7 +70,11 @@
 		btn.disabled = true;
 		btn.textContent = '開啟門市地圖...';
 
-		post('/stores/newebpay/map-url', { shipping_id: shippingId })
+		post('/stores/newebpay/map-url', {
+			shipping_id: shippingId,
+			return_url: window.location.href,
+			cart_scope: resolveCartScope()
+		})
 			.then(function (res) {
 				btn.disabled = false;
 				btn.innerHTML = originalHTML;

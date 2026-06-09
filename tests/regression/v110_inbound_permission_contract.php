@@ -23,7 +23,7 @@ $check = static function (string $label, bool $ok) use (&$fail): void {
 preg_match('/Version:\s*([0-9.]+)/', $main, $version_match);
 preg_match("/YS_CART_NEWEBPAY_VERSION', '([0-9.]+)'/", $main, $constant_match);
 
-$check('plugin version bumped to 1.0.9 and header/constant match', '1.0.9' === ($version_match[1] ?? '') && '1.0.9' === ($constant_match[1] ?? ''));
+$check('plugin version bumped to 1.0.10 and header/constant match', '1.0.10' === ($version_match[1] ?? '') && '1.0.10' === ($constant_match[1] ?? ''));
 $check('payment callbacks import YSInboundPermission', str_contains($payment, 'use YangSheep\\Ecommerce\\Security\\YSInboundPermission;'));
 $check('shipping callback imports YSInboundPermission', str_contains($shipping, 'use YangSheep\\Ecommerce\\Security\\YSInboundPermission;'));
 $check('store callback imports YSInboundPermission', str_contains($plugin, 'use YangSheep\\Ecommerce\\Security\\YSInboundPermission;'));

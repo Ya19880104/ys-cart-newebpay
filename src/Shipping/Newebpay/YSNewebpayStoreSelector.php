@@ -3,6 +3,7 @@
 namespace YangSheep\YSCartNewebpay\Shipping\Newebpay;
 
 use YangSheep\Ecommerce\Utils\YSLogger;
+use YangSheep\Ecommerce\Services\Setup\YSPageResolver;
 use YangSheep\YSCartNewebpay\Gateway\Newebpay\YSNewebpaySettings;
 use YangSheep\YSCartNewebpay\Logistics\Newebpay\YSNewebpayLogisticsClient;
 
@@ -20,7 +21,7 @@ final class YSNewebpayStoreSelector {
 	/**
 	 * @return array{action_url:string,fields:array<string,string>,temp_id:string}|false
 	 */
-	public static function build_map_form_data( string $shipping_id ) {
+	public static function build_map_form_data( string $shipping_id, string $cart_scope = 'default', string $return_url = '' ) {
 		$shipping_id = sanitize_key( $shipping_id );
 		if ( '' === $shipping_id || ! isset( self::METHOD_MAP[ $shipping_id ] ) ) {
 			return false;
@@ -30,6 +31,8 @@ final class YSNewebpayStoreSelector {
 			return false;
 		}
 
+		$cart_scope              = self::sanitize_cart_scope( $cart_scope );
+		$return_url              = self::sanitize_return_url( $return_url, $cart_scope );
 		[ $lgs_type, $ship_type ] = self::METHOD_MAP[ $shipping_id ];
 		$temp_id                 = wp_generate_uuid4();
 		$merchant_order_no       = substr( 'YSMAP' . str_replace( '-', '', $temp_id ), 0, 30 );
@@ -42,6 +45,8 @@ final class YSNewebpayStoreSelector {
 				'lgs_type'          => $lgs_type,
 				'ship_type'         => $ship_type,
 				'user_id'           => get_current_user_id(),
+				'cart_scope'        => $cart_scope,
+				'return_url'         => $return_url,
 				'created_at'        => current_time( 'timestamp' ),
 			],
 			30 * MINUTE_IN_SECONDS
@@ -106,6 +111,11 @@ final class YSNewebpayStoreSelector {
 			'lgs_type'      => sanitize_text_field( (string) ( $data['LgsType'] ?? $map_data['lgs_type'] ?? '' ) ),
 			'ship_type'     => sanitize_text_field( (string) ( $data['ShipType'] ?? $map_data['ship_type'] ?? '' ) ),
 			'shipping_id'   => $shipping_id,
+			'cart_scope'    => self::sanitize_cart_scope( (string) ( $map_data['cart_scope'] ?? 'default' ) ),
+			'return_url'    => self::sanitize_return_url(
+				(string) ( $map_data['return_url'] ?? '' ),
+				(string) ( $map_data['cart_scope'] ?? 'default' )
+			),
 			'selected_at'   => current_time( 'mysql' ),
 		];
 
@@ -147,11 +157,48 @@ final class YSNewebpayStoreSelector {
 		return false;
 	}
 
+	private static function sanitize_cart_scope( string $scope ): string {
+		$scope = sanitize_key( $scope );
+		if ( '' === $scope || ! preg_match( '/^[a-z0-9_]{1,32}$/', $scope ) ) {
+			return 'default';
+		}
+
+		return $scope;
+	}
+
+	private static function sanitize_return_url( string $return_url, string $cart_scope = 'default' ): string {
+		$fallback = self::checkout_url();
+		if ( 'default' !== $cart_scope ) {
+			$fallback = add_query_arg( [ 'cart_scope' => $cart_scope ], $fallback );
+		}
+
+		$return_url = trim( $return_url );
+		if ( '' === $return_url ) {
+			return $fallback;
+		}
+
+		$return_url = wp_validate_redirect( esc_url_raw( $return_url ), $fallback );
+		if ( 'default' !== $cart_scope ) {
+			$return_url = add_query_arg( [ 'cart_scope' => $cart_scope ], $return_url );
+		}
+
+		return $return_url ?: $fallback;
+	}
+
+	private static function checkout_url(): string {
+		if ( class_exists( YSPageResolver::class ) ) {
+			return YSPageResolver::checkout_url();
+		}
+
+		return home_url( '/checkout/' );
+	}
+
 	/**
 	 * @param array<string,string> $store_info
 	 */
 	private static function render_callback_page( array $store_info ): void {
 		$json_data = wp_json_encode( $store_info, JSON_UNESCAPED_UNICODE );
+		$checkout_url = esc_url( $store_info['return_url'] ?? self::checkout_url() );
 		?>
 		<!doctype html>
 		<html>
@@ -178,7 +225,9 @@ final class YSNewebpayStoreSelector {
 					store_address: storeData.store_address
 				}, '<?php echo esc_url( home_url() ); ?>');
 				window.close();
+				return;
 			}
+			window.location.replace(<?php echo wp_json_encode( $checkout_url ); ?>);
 		})();
 		</script>
 		</body>
