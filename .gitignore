@@ -7,3 +7,6 @@
 !/vendor/yangsheep/ys-plugin-hub-client/**
 .DS_Store
 Thumbs.db
+
+# 開發計畫/規格（本地保留、不發布到 GitHub）
+/docs/superpowers/
