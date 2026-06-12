@@ -95,6 +95,14 @@ final class YSNewebpayPaymentReconciler implements YSPaymentReconcilerInterface 
 			'response_message'   => (string) ( $payload['Message'] ?? '' ),
 		];
 
+		// v2.x 安全修正：補上 paid_amount（藍新 query 回傳的 Amt），讓 reconcile → mark_paid
+		// 也受核心金額守衛保護（守衛在 paid_amount <= 0 時 fail-open，缺金額等於不核對）。
+		// Amt 為整數元 TWD，與 order->total 同單位（無需換算）。取不到回 null（不回 0）。
+		$raw_amt = YSNewebpayClient::extract_result_value( $payload, 'Amt' );
+		if ( '' !== $raw_amt && is_numeric( $raw_amt ) && (float) $raw_amt > 0 ) {
+			$detail['paid_amount'] = (float) $raw_amt;
+		}
+
 		return YSPaymentDetailDTO::from_legacy_array( $detail, $gateway_id );
 	}
 

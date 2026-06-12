@@ -104,6 +104,19 @@ final class YSNewebpayWebhookHandler {
 		];
 
 		if ( 'paid' === $mapped ) {
+			// v2.x 安全：若 payload 取不到 Amt，paid_amount 缺席 → 核心金額守衛 fail-open
+			// （不核對金額）。明確記 warning 供營運稽核（仍依藍新成功通知推進，留下軌跡）。
+			if ( null === self::extract_paid_amount( $payload ) ) {
+				YSLogger::warning(
+					'newebpay',
+					'付款成功但 payload 缺 Amt，金額守衛無法核對',
+					[
+						'order_id'    => $order_id,
+						'trade_no'    => $trade_no,
+						'order_total' => (float) ( $order->total ?? 0 ),
+					]
+				);
+			}
 			$transition = YSPaymentLifecycleService::mark_paid( $order_id, $detail, $source );
 			$result['action']  = ! empty( $transition['success'] ) ? 'mark_paid' : 'mark_paid_rejected';
 			$result['message'] = (string) ( $transition['message'] ?? '' );
@@ -178,11 +191,44 @@ final class YSNewebpayWebhookHandler {
 			'response_message'   => (string) ( $payload['Message'] ?? '' ),
 		];
 
+		// v2.x 安全修正：補上 paid_amount（藍新回傳的實付金額 Amt）。
+		// 核心 YSPaymentLifecycleService 進 processing 時會用 paid_amount_matches_order
+		// 守衛比對「實付金額 vs order->total」，但該守衛在 paid_amount <= 0 時 fail-open。
+		// 先前本 handler 沒帶 Amt → 守衛變 no-op，webhook 收到付款成功即原價入帳、不核對金額。
+		// 藍新 Amt 為整數元 TWD（與 order->total 同單位，無需換算），且已用於 CheckCode 驗章。
+		$paid_amount = self::extract_paid_amount( $payload );
+		if ( null !== $paid_amount ) {
+			$detail['paid_amount'] = $paid_amount;
+		}
+
 		if ( '1' === YSNewebpaySettings::get( 'debug_enabled', '0' ) ) {
 			$detail['raw_callback'] = $payload;
 		}
 
 		return YSPaymentDetailDTO::from_legacy_array( $detail, $gateway_id );
+	}
+
+	/**
+	 * 從藍新 decrypt 後的 payload 取出實付金額（Amt）。
+	 *
+	 * 藍新 callback 解密後金額欄位為 `Amt`（位於 Result 物件或 top-level），
+	 * 透過 YSNewebpayClient::extract_result_value 取得；單位為整數元 TWD，
+	 * 與 order->total 同單位（無需換算）。
+	 *
+	 * 防禦性：取不到或非數值時回 null（而非 0），避免讓核心守衛 fail-open
+	 * （paid_amount <= 0 → return true，等同不核對金額）。
+	 *
+	 * @param array<string,mixed> $payload
+	 * @return float|null
+	 */
+	private static function extract_paid_amount( array $payload ): ?float {
+		$raw = YSNewebpayClient::extract_result_value( $payload, 'Amt' );
+		if ( '' === $raw || ! is_numeric( $raw ) ) {
+			return null;
+		}
+
+		$amount = (float) $raw;
+		return $amount > 0 ? $amount : null;
 	}
 
 	private static function canonical_payment_type( string $payment_type, string $gateway_id ): string {
