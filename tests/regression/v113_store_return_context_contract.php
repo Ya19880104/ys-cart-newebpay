@@ -29,10 +29,13 @@ $plugin   = $read( 'src/Plugin.php' );
 $selector = $read( 'src/Shipping/Newebpay/YSNewebpayStoreSelector.php' );
 $bridge   = $read( 'assets/js/newebpay-store-selector.js' );
 
+preg_match( '/Version:\s*([0-9.]+)/', $main, $v113_header );
+preg_match( "/YS_CART_NEWEBPAY_VERSION', '([0-9.]+)'/", $main, $v113_constant );
 $check(
-	'version bumped for store return context fix',
-	strpos( $main, 'Version: 1.0.10' ) !== false
-		&& strpos( $main, "define( 'YS_CART_NEWEBPAY_VERSION', '1.0.10' )" ) !== false
+	'version header/constant match and >= 1.0.10 (store return context fix)',
+	'' !== ( $v113_header[1] ?? '' )
+		&& ( $v113_header[1] ?? '' ) === ( $v113_constant[1] ?? '' )
+		&& version_compare( $v113_header[1] ?? '0', '1.0.10', '>=' )
 );
 
 $check(
