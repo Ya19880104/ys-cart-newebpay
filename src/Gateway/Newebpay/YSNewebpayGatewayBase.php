@@ -204,6 +204,15 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 		];
 	}
 
+	/**
+	 * 自動金流退款能力宣告（core v2.56.4 退款能力協定）——本閘道具真實
+	 * 退款 API（process_refund 打 API），宣告 true 讓 core 直接呼叫、
+	 * 後台不顯示「訂單退款≠金流退款」警示。
+	 */
+	public function supports_gateway_refund(): bool {
+		return true;
+	}
+
 	public function process_refund( int $order_id, float $amount, string $reason = '', array $context = [] ): array {
 		$order = YSOrder::find( $order_id );
 		if ( ! $order ) {
