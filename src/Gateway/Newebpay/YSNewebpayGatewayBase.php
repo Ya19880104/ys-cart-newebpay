@@ -205,12 +205,13 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 	}
 
 	/**
-	 * 自動金流退款能力宣告（core v2.56.4 退款能力協定）——本閘道具真實
-	 * 退款 API（process_refund 打 API），宣告 true 讓 core 直接呼叫、
-	 * 後台不顯示「訂單退款≠金流退款」警示。
+	 * 自動金流退款能力宣告（core v2.56.4 退款能力協定）——**方法級**：
+	 * 白名單必須與 process_refund() 的支援清單一致（credit／inst／linepay／applepay
+	 * 具真實退款 API；ATM／CVS／barcode 在 process_refund 內明確拒絕＝人工退款，
+	 * 宣告 false 讓後台顯示「訂單退款≠金流退款」警示）。
 	 */
 	public function supports_gateway_refund(): bool {
-		return true;
+		return in_array( $this->method_key, [ 'credit', 'inst', 'linepay', 'applepay' ], true );
 	}
 
 	public function process_refund( int $order_id, float $amount, string $reason = '', array $context = [] ): array {
