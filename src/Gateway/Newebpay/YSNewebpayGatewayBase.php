@@ -265,39 +265,109 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 		}
 
 		foreach ( $history as $entry ) {
-			if ( ( $entry['signature'] ?? '' ) === $signature && ! empty( $entry['success'] ) ) {
+			if ( ( $entry['signature'] ?? '' ) !== $signature ) {
+				continue;
+			}
+			if ( ! empty( $entry['success'] ) ) {
 				return [
 					'success'        => true,
 					'transaction_id' => (string) ( $entry['refund_order_id'] ?? $merchant_order_no ),
 					'message'        => '退款已處理。',
 				];
 			}
+			// v2.56.4（CODEX 終審 R6-F3）：同 signature 先前已送出但結果未落盤
+			//（submitting）→ 凍結：可能已在藍新端退款，重送＝重複退款。
+			//（舊資料無 status 欄位＝明確失敗過的 attempt，不在此攔、可重試。）
+			if ( 'submitting' === (string) ( $entry['status'] ?? '' ) ) {
+				return [
+					'success' => false,
+					'message' => '此退款請求先前已送出但結果未落盤，為避免重複退款已凍結；請先於藍新後台核對實際狀態，再人工核定處理。',
+				];
+			}
+		}
+
+		// v2.56.4（CODEX 終審 R6-F3）：pre-send durable attempt——送出**之前**先落盤
+		// submitting entry；寫入失敗＝冪等防線不存在，不得送出（金流未動、可安全重試）。
+		$refund_order_id = substr( 'YS' . $order_id . 'R' . str_replace( '-', '', wp_generate_uuid4() ), 0, 32 );
+		$history[]       = [
+			'refund_order_id'   => $refund_order_id,
+			'amount'            => $refund_amount,
+			'reason'            => $reason,
+			'refund_request_id' => $refund_request_id,
+			'signature'         => $signature,
+			'success'           => false,
+			'status'            => 'submitting',
+			'message'           => '',
+			'requested_at'      => current_time( 'mysql' ),
+		];
+		$payment_detail[ self::REFUND_HISTORY_KEY ] = $history;
+
+		if ( ! YSOrder::update( $order_id, [ 'payment_detail' => wp_json_encode( $payment_detail ) ] ) ) {
+			YSLogger::error( 'newebpay', '退款 attempt 持久化失敗，已中止（未送出退款請求）', [
+				'order_id'          => $order_id,
+				'refund_request_id' => $refund_request_id,
+			] );
+			return [
+				'success' => false,
+				'message' => '退款請求無法持久化（冪等防線寫入失敗），已中止；未送出藍新退款請求，請重試。',
+			];
 		}
 
 		$result = in_array( $this->method_key, [ 'credit', 'inst' ], true )
 			? $this->get_client()->refund_credit_card( $merchant_order_no, $refund_amount )
 			: $this->get_client()->refund_ewallet( $trade_no, $merchant_order_no, $refund_amount );
 
-		$history[] = [
-			'refund_order_id'   => substr( 'YS' . $order_id . 'R' . str_replace( '-', '', wp_generate_uuid4() ), 0, 32 ),
-			'amount'            => $refund_amount,
-			'reason'            => $reason,
-			'refund_request_id' => $refund_request_id,
-			'signature'         => $signature,
-			'success'           => ! empty( $result['success'] ),
-			'message'           => (string) ( $result['message'] ?? '' ),
-			'requested_at'      => current_time( 'mysql' ),
-		];
-		$payment_detail[ self::REFUND_HISTORY_KEY ] = $history;
+		// 送出後把 provider 結果落盤（fresh read——core handler 於本呼叫前後也會寫
+		// payment_detail，用 stale array 寫回會洗掉 core 的 finalization ledger）。
+		$outcome_saved = false;
+		$fresh         = YSOrder::find( $order_id );
+		if ( $fresh ) {
+			$fresh_detail = json_decode( (string) ( $fresh->payment_detail ?? '{}' ), true );
+			if ( is_array( $fresh_detail ) ) {
+				$fresh_history = $fresh_detail[ self::REFUND_HISTORY_KEY ] ?? [];
+				if ( is_array( $fresh_history ) ) {
+					foreach ( $fresh_history as $i => $saved_entry ) {
+						if ( ( $saved_entry['refund_order_id'] ?? '' ) === $refund_order_id ) {
+							$fresh_history[ $i ]['success'] = ! empty( $result['success'] );
+							$fresh_history[ $i ]['status']  = ! empty( $result['success'] ) ? 'done' : 'failed';
+							$fresh_history[ $i ]['message'] = (string) ( $result['message'] ?? '' );
 
-		YSOrder::update( $order_id, [ 'payment_detail' => wp_json_encode( $payment_detail ) ] );
+							$fresh_detail[ self::REFUND_HISTORY_KEY ] = $fresh_history;
+
+							$outcome_saved = (bool) YSOrder::update( $order_id, [
+								'payment_detail' => wp_json_encode( $fresh_detail ),
+							] );
+							break;
+						}
+					}
+				}
+			}
+		}
 
 		if ( ! empty( $result['success'] ) ) {
+			// 結果寫失敗但藍新已受理：不得回 false（會被 core 當「金流未動」標
+			// aborted）；回 success＋警示訊息，由 core 透傳到後台（R6-F6）。
+			$note = $outcome_saved ? '' : '⚠ 藍新已受理退款，但本地退款紀錄更新失敗，請於藍新後台核對。';
+			if ( '' !== $note ) {
+				YSLogger::error( 'newebpay', 'CRITICAL: 退款結果落盤失敗（藍新已受理）', [
+					'order_id'        => $order_id,
+					'refund_order_id' => $refund_order_id,
+				] );
+			}
 			return [
 				'success'        => true,
 				'transaction_id' => $merchant_order_no,
-				'message'        => '藍新退款請求已送出。',
+				'message'        => trim( '藍新退款請求已送出。' . ( '' === $note ? '' : ' ' . $note ) ),
 			];
+		}
+
+		if ( ! $outcome_saved ) {
+			// 拒絕結果寫失敗 → entry 停留 submitting（同 id 之後會被凍結）——保守方向，
+			// 寧可要求人工核對，不冒重送風險。
+			YSLogger::error( 'newebpay', 'CRITICAL: 退款拒絕結果落盤失敗（entry 停留 submitting，同請求將凍結）', [
+				'order_id'        => $order_id,
+				'refund_order_id' => $refund_order_id,
+			] );
 		}
 
 		return [
