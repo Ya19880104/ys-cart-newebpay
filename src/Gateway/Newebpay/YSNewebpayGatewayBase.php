@@ -215,10 +215,13 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 	}
 
 	public function process_refund( int $order_id, float $amount, string $reason = '', array $context = [] ): array {
+		// R7-F1：pre-send 業務拒絕（金流未動）→ outcome=rejected_terminal（可安全重試）。
+		//         字面值＝與 core YSRefundHandler::REFUND_OUTCOME_* 契約一致。
 		$order = YSOrder::find( $order_id );
 		if ( ! $order ) {
 			return [
 				'success' => false,
+				'outcome' => 'rejected_terminal',
 				'message' => '找不到訂單。',
 			];
 		}
@@ -226,6 +229,7 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 		if ( ! in_array( $this->method_key, [ 'credit', 'inst', 'linepay', 'applepay' ], true ) ) {
 			return [
 				'success' => false,
+				'outcome' => 'rejected_terminal',
 				'message' => '此藍新付款方式不支援線上退款。',
 			];
 		}
@@ -234,6 +238,7 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 		if ( $refund_amount <= 0 ) {
 			return [
 				'success' => false,
+				'outcome' => 'rejected_terminal',
 				'message' => '退款金額無效。',
 			];
 		}
@@ -249,6 +254,7 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 		if ( '' === $merchant_order_no ) {
 			return [
 				'success' => false,
+				'outcome' => 'rejected_terminal',
 				'message' => '缺少藍新商店訂單編號。',
 			];
 		}
@@ -279,8 +285,10 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 			//（submitting）→ 凍結：可能已在藍新端退款，重送＝重複退款。
 			//（舊資料無 status 欄位＝明確失敗過的 attempt，不在此攔、可重試。）
 			if ( 'submitting' === (string) ( $entry['status'] ?? '' ) ) {
+				// 先前已送出未落盤＝結果不明 → indeterminate（core 亦凍結）。
 				return [
 					'success' => false,
+					'outcome' => 'indeterminate',
 					'message' => '此退款請求先前已送出但結果未落盤，為避免重複退款已凍結；請先於藍新後台核對實際狀態，再人工核定處理。',
 				];
 			}
@@ -309,6 +317,7 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 			] );
 			return [
 				'success' => false,
+				'outcome' => 'rejected_terminal',
 				'message' => '退款請求無法持久化（冪等防線寫入失敗），已中止；未送出藍新退款請求，請重試。',
 			];
 		}
@@ -316,6 +325,12 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 		$result = in_array( $this->method_key, [ 'credit', 'inst' ], true )
 			? $this->get_client()->refund_credit_card( $merchant_order_no, $refund_amount )
 			: $this->get_client()->refund_ewallet( $trade_no, $merchant_order_no, $refund_amount );
+
+		// R7-F1：client 的 indeterminate 旗標（timeout／非 2xx）決定失敗落盤的 status——
+		// 不明＝維持 'submitting'（同 signature 重試被凍結、不重送）；明確拒絕＝'failed'
+		// （可重試）。舊版把 timeout 一律記 'failed' → 同 UUID 重試新 refund_order_id 再送
+		// ＝重複退款（CODEX 終審 R7-F1 修正）。
+		$is_indeterminate = ! empty( $result['indeterminate'] );
 
 		// 送出後把 provider 結果落盤（fresh read——core handler 於本呼叫前後也會寫
 		// payment_detail，用 stale array 寫回會洗掉 core 的 finalization ledger）。
@@ -329,7 +344,9 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 					foreach ( $fresh_history as $i => $saved_entry ) {
 						if ( ( $saved_entry['refund_order_id'] ?? '' ) === $refund_order_id ) {
 							$fresh_history[ $i ]['success'] = ! empty( $result['success'] );
-							$fresh_history[ $i ]['status']  = ! empty( $result['success'] ) ? 'done' : 'failed';
+							$fresh_history[ $i ]['status']  = ! empty( $result['success'] )
+								? 'done'
+								: ( $is_indeterminate ? 'submitting' : 'failed' );
 							$fresh_history[ $i ]['message'] = (string) ( $result['message'] ?? '' );
 
 							$fresh_detail[ self::REFUND_HISTORY_KEY ] = $fresh_history;
@@ -361,6 +378,22 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 			];
 		}
 
+		// R7-F1：結果不明（timeout／非 2xx）→ outcome=indeterminate，core 維持凍結、
+		// 禁重送；entry 已落 'submitting'（或落盤失敗仍停 submitting）＝同 id 重試被凍結。
+		// 字面值＝與 core YSRefundHandler::REFUND_OUTCOME_* 契約一致。
+		if ( $is_indeterminate ) {
+			YSLogger::error( 'newebpay', 'CRITICAL: 退款結果未明（傳輸中斷/非 2xx）— 本單凍結待人工核定', [
+				'order_id'        => $order_id,
+				'refund_order_id' => $refund_order_id,
+			] );
+			return [
+				'success' => false,
+				'outcome' => 'indeterminate',
+				'message' => '藍新退款結果未明（傳輸中斷或伺服器未回覆），為避免重複退款已凍結；請於藍新後台核對後人工核定。',
+			];
+		}
+
+		// provider 明確拒絕（HTTP 2xx 但業務碼失敗）＝金流未動、可安全重試。
 		if ( ! $outcome_saved ) {
 			// 拒絕結果寫失敗 → entry 停留 submitting（同 id 之後會被凍結）——保守方向，
 			// 寧可要求人工核對，不冒重送風險。
@@ -372,6 +405,7 @@ abstract class YSNewebpayGatewayBase implements YSGatewayInterface {
 
 		return [
 			'success' => false,
+			'outcome' => 'rejected_terminal',
 			'message' => (string) ( $result['message'] ?? '藍新退款失敗。' ),
 		];
 	}

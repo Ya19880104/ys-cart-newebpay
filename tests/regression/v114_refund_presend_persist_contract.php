@@ -101,5 +101,22 @@ $assert(
 	'(5) 藍新已受理＋紀錄寫失敗 → success=true＋警示訊息'
 );
 
+// ── R7-F1：typed outcome（indeterminate vs rejected_terminal）──
+$client_src = str_replace( "\r\n", "\n", (string) file_get_contents( $base . '/src/Gateway/Newebpay/YSNewebpayClient.php' ) );
+$assert(
+	substr_count( $client_src, "'indeterminate' => true" ) >= 2
+	&& str_contains( $client_src, "'indeterminate' => false" ),
+	'(6) client：連線/非 2xx→indeterminate=true、HTTP 2xx 業務拒絕→indeterminate=false'
+);
+$assert(
+	str_contains( $method, "( \$is_indeterminate ? 'submitting' : 'failed' )" ),
+	'(7) 失敗落盤 status：indeterminate→submitting（凍結、防同 UUID 重送）、terminal→failed'
+);
+$assert(
+	str_contains( $method, "'outcome' => 'indeterminate'" )
+	&& str_contains( $method, "'outcome' => 'rejected_terminal'" ),
+	'(8) gateway 失敗回 typed outcome（indeterminate 凍結／rejected_terminal 可重試）'
+);
+
 echo "\nnewebpay refund pre-send persist contract: {$pass} PASS / {$fail} FAIL\n";
 exit( $fail > 0 ? 1 : 0 );

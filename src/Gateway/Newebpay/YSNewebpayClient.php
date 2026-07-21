@@ -341,10 +341,12 @@ final class YSNewebpayClient {
 		if ( is_wp_error( $response ) ) {
 			$this->last_http_status = 0;
 			YSLogger::error( 'newebpay', $context . ' HTTP error', [ 'message' => $response->get_error_message() ] );
+			// R7-F1：連線層失敗（timeout 等）＝結果不明——退款 caller 據此凍結而非重送。
 			return [
-				'success' => false,
-				'data'    => null,
-				'message' => $response->get_error_message(),
+				'success'       => false,
+				'indeterminate' => true,
+				'data'          => null,
+				'message'       => $response->get_error_message(),
 			];
 		}
 
@@ -357,12 +359,24 @@ final class YSNewebpayClient {
 			$data = is_array( $parsed ) ? $parsed : [];
 		}
 
-		$status = strtoupper( (string) ( $data['Status'] ?? '' ) );
-		if ( $this->last_http_status < 200 || $this->last_http_status >= 300 || 'SUCCESS' !== $status ) {
+		$http_ok = ( $this->last_http_status >= 200 && $this->last_http_status < 300 );
+		$status  = strtoupper( (string) ( $data['Status'] ?? '' ) );
+		if ( ! $http_ok ) {
+			// R7-F1：HTTP 非 2xx＝伺服器層不確定（server 可能已收並處理）→ indeterminate。
 			return [
-				'success' => false,
-				'data'    => $data,
-				'message' => (string) ( $data['Message'] ?? 'NewebPay API request failed.' ),
+				'success'       => false,
+				'indeterminate' => true,
+				'data'          => $data,
+				'message'       => (string) ( $data['Message'] ?? 'NewebPay API request failed.' ),
+			];
+		}
+		if ( 'SUCCESS' !== $status ) {
+			// R7-F1：HTTP 2xx 但業務碼非 SUCCESS＝provider 明確拒絕（terminal，可重試）。
+			return [
+				'success'       => false,
+				'indeterminate' => false,
+				'data'          => $data,
+				'message'       => (string) ( $data['Message'] ?? 'NewebPay API request failed.' ),
 			];
 		}
 
