@@ -118,5 +118,13 @@ $assert(
 	'(8) gateway 失敗回 typed outcome（indeterminate 凍結／rejected_terminal 可重試）'
 );
 
+// (9) R8-F1：2xx 但不符成功 envelope（缺 Status）→ indeterminate，不得當 terminal
+//     解凍後重送（重複退款）。
+$assert(
+	str_contains( $client_src, "! isset( \$data['Status'] )" )
+	&& str_contains( $client_src, '藍新回應缺少 Status 業務碼' ),
+	'(9) R8-F1：HTTP 2xx 但缺 Status 業務碼 → indeterminate（非 terminal）'
+);
+
 echo "\nnewebpay refund pre-send persist contract: {$pass} PASS / {$fail} FAIL\n";
 exit( $fail > 0 ? 1 : 0 );

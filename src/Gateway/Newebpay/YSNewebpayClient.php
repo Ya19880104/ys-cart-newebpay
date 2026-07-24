@@ -360,7 +360,6 @@ final class YSNewebpayClient {
 		}
 
 		$http_ok = ( $this->last_http_status >= 200 && $this->last_http_status < 300 );
-		$status  = strtoupper( (string) ( $data['Status'] ?? '' ) );
 		if ( ! $http_ok ) {
 			// R7-F1：HTTP 非 2xx＝伺服器層不確定（server 可能已收並處理）→ indeterminate。
 			return [
@@ -370,8 +369,27 @@ final class YSNewebpayClient {
 				'message'       => (string) ( $data['Message'] ?? 'NewebPay API request failed.' ),
 			];
 		}
+
+		// R8-F1：2xx 但**不符成功 envelope**（body 無法解析成陣列／缺 Status 業務碼）＝
+		// 無法判定藍新是否已處理 → indeterminate。舊版把「缺 Status」歸成 terminal，
+		// 會解除凍結、允許再次退款＝重複退款風險（CODEX 終審 R8-F1）。
+		if ( ! is_array( $data ) || ! isset( $data['Status'] ) || '' === trim( (string) $data['Status'] ) ) {
+			YSLogger::error( 'newebpay', $context . ' 回應不符 envelope（缺 Status）', [
+				'http_status' => $this->last_http_status,
+				'raw_head'    => substr( $raw, 0, 200 ),
+			] );
+			return [
+				'success'       => false,
+				'indeterminate' => true,
+				'data'          => is_array( $data ) ? $data : [],
+				'message'       => '藍新回應缺少 Status 業務碼（回應異常，結果未明）。',
+			];
+		}
+
+		$status = strtoupper( (string) $data['Status'] );
 		if ( 'SUCCESS' !== $status ) {
-			// R7-F1：HTTP 2xx 但業務碼非 SUCCESS＝provider 明確拒絕（terminal，可重試）。
+			// R7-F1：HTTP 2xx 且 envelope 完整但業務碼非 SUCCESS＝provider 明確拒絕
+			// （terminal，可安全重試）。
 			return [
 				'success'       => false,
 				'indeterminate' => false,
