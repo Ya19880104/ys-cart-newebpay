@@ -58,43 +58,60 @@ final class YSNewebpayWebhookHandler {
 		$mapped    = self::map_status( $status, $payment_type, $pay_time, $trade_status );
 
 		$store_detail = self::extract_store_detail( $payload );
-		$write_detail = $existing_detail;
-		$write_detail[ self::META_TRADE_NO ]    = $trade_no;
-		$write_detail[ self::META_LAST_STATUS ] = $status;
-		$write_detail[ self::META_LAST_ACTION ] = $action_key;
-		$write_detail['newebpay_merchant_order_no'] = $merchant_order_no ?: (string) ( $existing_detail['newebpay_merchant_order_no'] ?? '' );
-		$write_detail['newebpay_payment_type']      = $payment_type;
-		$write_detail['newebpay_callback_at']       = current_time( 'mysql' );
-		$write_detail['newebpay_status_message']    = (string) ( $payload['Message'] ?? '' );
 
-		if ( ! empty( $store_detail ) ) {
-			$write_detail['newebpay_store'] = $store_detail;
-			$write_detail['shipping']       = array_merge(
-				is_array( $write_detail['shipping'] ?? null ) ? $write_detail['shipping'] : [],
-				self::store_detail_to_shipping( $store_detail )
-			);
-		}
-
-		$order_update = [
-			'payment_detail' => wp_json_encode( $write_detail ),
-		];
+		// R14（CODEX 跨 repo 金融一致性）：payment_detail 改 **CAS mutator 寫入**——
+		// 舊 whole-JSON 盲寫以進場 stale $order 做 RMW，會在 core 退款 CAS 成功後
+		// 反向整包覆蓋 ledger（succeeded 倒退）。附帶欄位（gateway_trade_no／CVS）
+		// 同語句 SET；寫入失敗必須消費（不得繼續 transition）。
+		$also_fields = [];
 		if ( '' !== $trade_no ) {
-			$order_update['gateway_trade_no'] = $trade_no;
+			$also_fields['gateway_trade_no'] = $trade_no;
 		}
 		if ( ! empty( $store_detail['store_id'] ) ) {
-			$order_update['cvs_store_id'] = (string) $store_detail['store_id'];
+			$also_fields['cvs_store_id'] = (string) $store_detail['store_id'];
 		}
 		if ( ! empty( $store_detail['store_name'] ) ) {
-			$order_update['cvs_store_name'] = (string) $store_detail['store_name'];
+			$also_fields['cvs_store_name'] = (string) $store_detail['store_name'];
 		}
 		if ( ! empty( $store_detail['store_address'] ) ) {
-			$order_update['cvs_store_addr'] = (string) $store_detail['store_address'];
+			$also_fields['cvs_store_addr'] = (string) $store_detail['store_address'];
 		}
 		if ( ! empty( $store_detail['lgs_no'] ) ) {
-			$order_update['tracking_number'] = (string) $store_detail['lgs_no'];
+			$also_fields['tracking_number'] = (string) $store_detail['lgs_no'];
 		}
-
-		YSOrder::update( $order_id, $order_update );
+		$detail_written = self::cas_update_payment_detail(
+			$order_id,
+			static function ( array $fresh_detail ) use ( $trade_no, $status, $action_key, $merchant_order_no, $payment_type, $payload, $store_detail ): array {
+				$fresh_detail[ self::META_TRADE_NO ]    = $trade_no;
+				$fresh_detail[ self::META_LAST_STATUS ] = $status;
+				$fresh_detail[ self::META_LAST_ACTION ] = $action_key;
+				$fresh_detail['newebpay_merchant_order_no'] = $merchant_order_no ?: (string) ( $fresh_detail['newebpay_merchant_order_no'] ?? '' );
+				$fresh_detail['newebpay_payment_type']      = $payment_type;
+				$fresh_detail['newebpay_callback_at']       = current_time( 'mysql' );
+				$fresh_detail['newebpay_status_message']    = (string) ( $payload['Message'] ?? '' );
+				if ( ! empty( $store_detail ) ) {
+					$fresh_detail['newebpay_store'] = $store_detail;
+					$fresh_detail['shipping']       = array_merge(
+						is_array( $fresh_detail['shipping'] ?? null ) ? $fresh_detail['shipping'] : [],
+						self::store_detail_to_shipping( $store_detail )
+					);
+				}
+				return $fresh_detail;
+			},
+			$also_fields
+		);
+		if ( ! $detail_written ) {
+			YSLogger::error( 'newebpay', 'CRITICAL: webhook payment_detail 寫入失敗（中止，不進行狀態轉換）', [
+				'order_id' => $order_id,
+				'trade_no' => $trade_no,
+			] );
+			return [
+				'success' => false,
+				'action'  => 'persist_failed',
+				'mapped'  => $mapped,
+				'message' => 'payment_detail persist failed.',
+			];
+		}
 
 		$result = [
 			'success' => true,
@@ -315,5 +332,73 @@ final class YSNewebpayWebhookHandler {
 			],
 			static fn( string $value ): bool => '' !== $value
 		);
+	}
+
+	/**
+	 * payment_detail 的 CAS mutator 寫入（R14：跨 repo writer ownership 統一）
+	 *
+	 * fresh read（穿透模型層快取）→ mutator 重算 → 真 CAS（WHERE payment_detail=
+	 * 舊 raw、NULL 用 IS NULL）→ 落敗重讀重放（bounded retry）。同值＝合法冪等
+	 * no-op（同值 UPDATE 回 0 不得誤判競爭）；SQL 失敗（false）不重試。
+	 * 附帶欄位（gateway_trade_no／CVS）同語句 SET；欄名為程式內常數非外部輸入。
+	 */
+	private static function cas_update_payment_detail( int $order_id, callable $mutator, array $also_fields = [] ): bool {
+		global $wpdb;
+		$table = $wpdb->prefix . 'ys_ec_orders';
+		for ( $i = 0; $i < 3; $i++ ) {
+			if ( method_exists( YSOrder::class, 'forget' ) ) {
+				YSOrder::forget( $order_id );
+			}
+			$fresh = YSOrder::find( $order_id );
+			if ( ! $fresh ) {
+				return false;
+			}
+			$old_raw = $fresh->payment_detail;
+			$detail  = json_decode( (string) ( $old_raw ?? '{}' ), true );
+			if ( ! is_array( $detail ) ) {
+				$detail = [];
+			}
+			$mutated = $mutator( $detail );
+			if ( null === $mutated ) {
+				return true;
+			}
+			$new_raw    = wp_json_encode( $mutated );
+			$alsos_same = true;
+			foreach ( $also_fields as $column => $value ) {
+				if ( (string) ( $fresh->{$column} ?? '' ) !== (string) $value ) {
+					$alsos_same = false;
+					break;
+				}
+			}
+			if ( $new_raw === $old_raw && $alsos_same ) {
+				return true; // 目標值已達＝冪等 no-op
+			}
+			$sets   = [ 'payment_detail = %s' ];
+			$values = [ $new_raw ];
+			foreach ( $also_fields as $column => $value ) {
+				$sets[]   = "`{$column}` = %s";
+				$values[] = (string) $value;
+			}
+			$values[] = $order_id;
+			if ( null === $old_raw ) {
+				$sql = "UPDATE {$table} SET " . implode( ', ', $sets ) . ' WHERE id = %d AND payment_detail IS NULL';
+			} else {
+				$sql      = "UPDATE {$table} SET " . implode( ', ', $sets ) . ' WHERE id = %d AND payment_detail = %s';
+				$values[] = (string) $old_raw;
+			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
+			$updated = $wpdb->query( $wpdb->prepare( $sql, ...$values ) );
+			if ( false === $updated ) {
+				return false; // SQL 失敗（≠CAS 落敗）
+			}
+			if ( 1 === (int) $updated ) {
+				if ( method_exists( YSOrder::class, 'forget' ) ) {
+					YSOrder::forget( $order_id );
+				}
+				return true;
+			}
+			// 0 rows＝CAS 落敗（期間被改寫）→ 重讀重放
+		}
+		return false;
 	}
 }
